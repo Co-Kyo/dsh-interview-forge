@@ -45,6 +45,47 @@ export class ForgeGateway extends TypertRemoteService {
   report(args: { sessionId: string }): { reportHtml: string | null } {
     return { reportHtml: null }
   }
+
+  @Remote('load')
+  load(args: { sessionId: string }): unknown {
+    return { sessionId: args.sessionId, quiz: null, status: 'answering' }
+  }
+
+  @Remote('applySeed')
+  applySeed(args: { sessionId: string }): { ok: boolean; seeded?: number } {
+    void args
+    return { ok: true, seeded: 0 }
+  }
+
+  @Remote('answer')
+  answer(args: { sessionId: string; questionId: string; selected?: string | null; note?: string | null }): { ok: boolean } {
+    void args
+    return { ok: true }
+  }
+
+  @Remote('nav')
+  nav(args: { sessionId: string; index: number }): { ok: boolean } {
+    void args
+    return { ok: true }
+  }
+
+  @Remote('pause')
+  pause(args: { sessionId: string }): { ok: boolean } {
+    void args
+    return { ok: true }
+  }
+
+  @Remote('resume')
+  resume(args: { sessionId: string }): { ok: boolean } {
+    void args
+    return { ok: true }
+  }
+
+  @Remote('finish')
+  finish(args: { sessionId: string }): { ok: boolean } {
+    void args
+    return { ok: true }
+  }
 }
 
 export default ForgeGateway
