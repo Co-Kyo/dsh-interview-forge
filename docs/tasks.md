@@ -22,6 +22,7 @@
 2. **bundle preflight**：`~/.dsh/skills/dsh-plugin-development/scripts/check-artifact.mjs bundle ./forge-plugin` → `PASS, 0 warning`。
 3. **运行时常驻（探针）**：注入宿主 tools 全局注册表 → `globalSchemas=[forge_start, forge_report_ready, forge_result]`、`get('forge_start')=true`、`get('read')=false`（普通工具属 preset 非全局）。
 4. 会话可见性说明：`listTools` 返回本会话受限视图；全局工具注册表已证 host 已随启动注册；在无 restrict 的常规 preset 会话应可见。
+5. **TS 装配 + 跨端 host 面模型编译通过**：`npm i typescript@5 @deepseek-ai/cordis`（registry 可达）；`tsconfig.json` + `src/host/forge-gateway.ts`（`ForgeGateway extends TypertRemoteService` + `@Remote`）→ `npx tsc --noEmit` **exit 0**（证明 host 跨端 TS+装饰器可本机编译，闸门打通）。
 
 ## 待办（下一棒）
 
