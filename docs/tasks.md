@@ -36,3 +36,9 @@
 
 - 不分发 GitHub；本地 tgz 私有分发。
 - 跨端必须 `ctx.remote`（官方合同），正式实现前先小 spike 验证 client roster + remote 挂载在本地 profile 可加载。
+
+## v1 交付点（C 方案，本会话自主收口）
+- **可交付 v1** = `interview-forge-plugin-0.1.0.tgz`（host bundle：三工具 + 磁盘持久 + 资源随包）+ `interview-forge` skill 引导的**对话内作答**闭环（出题→对话作答→归因→报告）。
+- host 半边随 dsh 启动常驻（已探针验证）。浮层 client 为 DSH preview 缺少"外部 bundle 自带 browser roster"能力而**延后**（B/C 决策见 client-cross-end.md）。
+- 安装：`dsh plugin --profile web add ./interview-forge-plugin-0.1.0.tgz`（或用 profile 现有本地 link + cordis.patch.yml 的 interview-forge 行）；重启 dsh 生效。
+- 重启后验证：常规会话可见 `forge_*`；对 agent 说「开始练习」进入对话内速练闭环。
