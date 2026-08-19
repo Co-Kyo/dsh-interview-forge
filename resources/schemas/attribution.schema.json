@@ -1,0 +1,190 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InterviewForge 归因结果（attribution）契约",
+  "description": "归因阶段必须产出的结构化数据；渲染器只认此契约，拒绝未知/缺失字段。",
+  "type": "object",
+  "required": [
+    "sessionId",
+    "title",
+    "quizMeta",
+    "overall",
+    "dimensions",
+    "questions",
+    "actions"
+  ],
+  "properties": {
+    "sessionId": {
+      "type": "string",
+      "description": "练习会话 ID（if-YYYYMMDD-HHmmss）"
+    },
+    "title": {
+      "type": "string"
+    },
+    "quizMeta": {
+      "type": "object",
+      "required": [
+        "title",
+        "totalQuestions"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "totalQuestions": {
+          "type": "integer"
+        }
+      }
+    },
+    "overall": {
+      "type": "object",
+      "required": [
+        "score",
+        "totalQuestions",
+        "answered",
+        "correct"
+      ],
+      "properties": {
+        "score": {
+          "type": "integer",
+          "description": "0-100 综合得分"
+        },
+        "totalQuestions": {
+          "type": "integer"
+        },
+        "answered": {
+          "type": "integer"
+        },
+        "correct": {
+          "type": "integer"
+        }
+      }
+    },
+    "dimensions": {
+      "type": "array",
+      "description": "维度得分（0-100）",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "score"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "score": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "stem",
+          "userAnswer",
+          "correctAnswer",
+          "cognitionTag",
+          "evidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "stem": {
+            "type": "string"
+          },
+          "userAnswer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "correctAnswer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cognitionTag": {
+            "type": "string",
+            "description": "认知状态标签：理解精准/半懂/不会/直接放弃 等"
+          },
+          "evidence": {
+            "type": "string",
+            "description": "用户原话证据"
+          },
+          "crossCheck": {
+            "type": "string",
+            "description": "交叉检验结论（同 category 题目间一致性）"
+          },
+          "narrativeRisks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "叙事风险标签（7 种之一）"
+          },
+          "preciseCorrection": {
+            "type": "string",
+            "description": "用词不精确时的面试安全替代表述"
+          },
+          "questionAudit": {
+            "type": "object",
+            "properties": {
+              "flag": {
+                "type": "string",
+                "description": "ok 或审计标记"
+              }
+            }
+          },
+          "type": {
+            "type": "string",
+            "description": "题目类型：choice 选择题 | open 开放题（从题库拷贝）"
+          },
+          "isCorrect": {
+            "type": "boolean",
+            "description": "选择题事实对错：result.selected 与 quiz.answer 一致为 true（开放题不填此字段）"
+          }
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "description": "补强行动计划",
+      "items": {
+        "type": "object",
+        "required": [
+          "priority",
+          "category",
+          "action"
+        ],
+        "properties": {
+          "priority": {
+            "type": "string",
+            "description": "P0/P1/P2"
+          },
+          "category": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "diagnosisType": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "quiz.schema.json",
+  "title": "InterviewForge Quiz",
+  "description": "InterviewForge 题库 JSON 格式规范。前端项目以此 Schema 作为数据合同的唯一真相源，Skill 出题引擎生成的题库必须符合此 Schema。lifecycle 等扩展字段由 Skill 管道内部管理，不纳入前端合同。",
+  "type": "object",
+  "required": ["meta", "questions"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["title", "totalQuestions", "tags"],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "description": "面试主题标题"
+        },
+        "totalQuestions": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 12,
+          "description": "题目总数，必须与 questions 数组长度一致"
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 2,
+          "maxItems": 5,
+          "description": "2~5 个知识标签"
+        }
+      },
+      "additionalProperties": false
+    },
+    "questions": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 12,
+      "items": {
+        "$ref": "#/$defs/question"
+      }
+    }
+  },
+  "additionalProperties": false,
+
+  "$defs": {
+    "option": {
+      "type": "object",
+      "required": ["key", "text"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[A-Z]$",
+          "description": "选项标识，大写字母 A-Z"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "选项内容"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "question": {
+      "type": "object",
+      "required": ["id", "type", "category", "stem"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^q\\d{2}$",
+          "description": "题目 ID，格式 q01~q99，连续编号不跳号"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["choice", "open"],
+          "description": "题型：选择题 / 开放题"
+        },
+        "category": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 12,
+          "description": "维度分类（中文 2~4 字如'架构对比'，英文如'Tree-shaking'）"
+        },
+        "stem": {
+          "type": "string",
+          "minLength": 1,
+          "description": "题干"
+        },
+        "options": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 5,
+          "items": {
+            "$ref": "#/$defs/option"
+          },
+          "description": "选项列表（仅 choice 类型）"
+        },
+        "answer": {
+          "type": "string",
+          "pattern": "^[A-Z]$",
+          "description": "正确答案选项 key（仅 choice 类型）"
+        },
+        "explanation": {
+          "type": "string",
+          "description": "解析（选填，推荐填写）"
+        }
+      },
+      "additionalProperties": true,
+
+      "if": {
+        "properties": { "type": { "const": "choice" } },
+        "required": ["type"]
+      },
+      "then": {
+        "required": ["options", "answer"]
+      },
+      "else": {
+        "not": {
+          "anyOf": [
+            { "required": ["options"] },
+            { "required": ["answer"] }
+          ]
+        }
+      }
+    }
+  }
+}

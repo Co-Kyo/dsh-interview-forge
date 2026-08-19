@@ -1,0 +1,635 @@
+#!/usr/bin/env node
+
+/**
+ * InterviewForge 归因报告渲染器
+ *
+ * 用法：node render-report.cjs --json <attribution.json> --output <report.html>
+ *
+ * 读取归因 JSON，渲染为完整的 HTML 雷达报告。
+ * 零外部依赖，纯 Node.js 内置模块。
+ */
+
+const fs = require('fs');
+const path = require('path');
+
+// ---- CLI 参数解析 ----
+function parseArgs() {
+  const args = process.argv.slice(2);
+  let jsonPath = null;
+  let outputPath = null;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--json' && args[i + 1]) jsonPath = args[++i];
+    if (args[i] === '--output' && args[i + 1]) outputPath = args[++i];
+  }
+  if (!jsonPath) {
+    console.error('Usage: node render-report.cjs --json <attribution.json> --output <report.html>');
+    process.exit(1);
+  }
+  if (!outputPath) {
+    // 默认输出到同目录，文件名替换 attribution→report
+    outputPath = jsonPath.replace(/attribution-/, 'report-').replace(/\.json$/, '.html');
+  }
+  return { jsonPath, outputPath };
+}
+
+// ---- 文案配置（业务场景/环境相关文案集中于此） ----
+const COPY = {
+  sceneNote: '以「技术面试」为考察场景：按面试作答标准检验掌握度与表述能力',
+  riskSummaryTitle: '🚨 面试风险总结',
+  safePhraseLabel: '🎯 面试安全话术：',
+  preciseCorrectionLabel: '🎯 面试精确表述：',
+  ctaText: '报告中的 P0 级薄弱点已识别。回到当前对话，回复<strong>「继续推进」</strong>，即可启动针对性深度研究——从源码和权威资料出发，帮你从「知道结论」推进到「理解机制」。'
+};
+
+// ---- 工具函数 ----
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function scoreColor(pct) {
+  if (pct >= 80) return 'linear-gradient(90deg,#4caf50,#66bb6a)';
+  if (pct >= 60) return 'linear-gradient(90deg,#7c8cf8,#a0a8e8)';
+  if (pct >= 40) return 'linear-gradient(90deg,#ff9800,#ffa726)';
+  return 'linear-gradient(90deg,#f44336,#ef5350)';
+}
+
+function getCognitionTag(q) {
+  return q.cognitionTag || '';
+}
+
+// 英文→中文标签映射
+const cognitionLabelMap = {
+  'genuine': '真懂',
+  'partial': '半懂',
+  'half': '半懂',
+  'blind': '不会',
+  'surface': '表面懂',
+  'fuzzy': '模糊',
+  'inflated': '虚高',
+};
+
+function getCognitionLabel(q) {
+  const raw = getCognitionTag(q);
+  return cognitionLabelMap[raw] || raw;
+}
+
+function cardClass(cognitionTag) {
+  if (['真懂', 'genuine'].includes(cognitionTag)) return 'correct';
+  if (['不会', 'blind'].includes(cognitionTag)) return 'wrong';
+  return 'partial';
+}
+
+function tagClass(cognitionTag) {
+  if (['真懂', 'genuine'].includes(cognitionTag)) return 'tag-green';
+  if (['不会', 'blind'].includes(cognitionTag)) return 'tag-red';
+  return 'tag-orange';
+}
+
+function riskBadgeClass(risk) {
+  const high = ['过度推断', '不懂装懂', '版本盲区'];
+  if (high.includes(risk)) return 'risk-high';
+  return 'risk-mid';
+}
+
+function actionClass(priority) {
+  if (priority === 'P0') return 'action-p0';
+  if (priority === 'P1') return 'action-p1';
+  return 'action-p2';
+}
+
+function priorityLabel(priority) {
+  if (priority === 'P0') return 'P0 紧急';
+  if (priority === 'P1') return 'P1 重要';
+  return 'P2 可选';
+}
+
+function priorityColor(priority) {
+  if (priority === 'P0') return '#f44336';
+  if (priority === 'P1') return '#ff9800';
+  return '#4caf50';
+}
+
+// ---- 计算维度得分 ----
+function computeDimensionScores(data) {
+  if (Array.isArray(data.dimensions) && data.dimensions.length > 0 && typeof data.dimensions[0].score === 'number') {
+    return data.dimensions.map(d => ({ name: d.name, score: d.score }));
+  }
+  return [];
+}
+// ---- 计算叙事风险统计 ----
+function computeNarrativeRiskStats(data) {
+  const riskCounts = {};
+  data.questions.forEach(q => {
+    (q.narrativeRisks || []).forEach(r => {
+      riskCounts[r] = (riskCounts[r] || 0) + 1;
+    });
+  });
+
+  const badges = [];
+  for (const [risk, count] of Object.entries(riskCounts)) {
+    badges.push({ risk, count, cls: riskBadgeClass(risk) });
+  }
+  // 按数量降序
+  badges.sort((a, b) => b.count - a.count);
+  return badges;
+}
+
+// ---- 计算面试风险总结 ----
+function computeRiskSummary(data) {
+  const highRisks = [];
+  const midRisks = [];
+
+  data.questions.forEach(q => {
+    (q.narrativeRisks || []).forEach(risk => {
+      const entry = { risk, evidence: q.evidence, id: q.id };
+      if (['过度推断', '不懂装懂', '版本盲区'].includes(risk)) {
+        highRisks.push(entry);
+      } else {
+        midRisks.push(entry);
+      }
+    });
+  });
+
+  // 去重聚合
+  const riskGroups = {};
+  [...highRisks, ...midRisks].forEach(({ risk, evidence, id }) => {
+    if (!riskGroups[risk]) riskGroups[risk] = { risk, isHigh: highRisks.some(h => h.risk === risk), items: [] };
+    riskGroups[risk].items.push({ id, evidence });
+  });
+
+  return Object.values(riskGroups);
+}
+
+// ---- 计算选择题正确数 ----
+// 事实来源：questions[].isCorrect（选择题由归因按 result.selected === quiz.answer 判定）。
+// 禁止用 userAnswer/correctAnswer 文本比较推导（两者是带评注的叙述，永远不可能全等）。
+// 兼容旧数据（无 isCorrect）：回退到 overall.correct / overall.totalQuestions，并标记 fallback。
+function computeChoiceStats(data) {
+  const questions = data.questions || [];
+  const hasFact = questions.some(q => typeof q.isCorrect === 'boolean');
+  if (hasFact) {
+    const choices = questions.filter(q => q.type === 'choice' || typeof q.isCorrect === 'boolean');
+    const choiceCount = choices.length;
+    const correctCount = choices.filter(q => q.isCorrect === true).length;
+    return { correctCount, totalCount: choiceCount, fallback: false };
+  }
+  const total = data.overall?.totalQuestions || questions.length || 0;
+  return { correctCount: data.overall?.correct || 0, totalCount: total, fallback: true };
+}
+
+// ---- 叙事高风险题数（按题去重：一题多个高风险标签只计 1） ----
+const HIGH_RISK_TAGS = ['过度推断', '不懂装懂', '版本盲区'];
+function computeHighRiskQuestionCount(data) {
+  return (data.questions || []).filter(q =>
+    (q.narrativeRisks || []).some(r => HIGH_RISK_TAGS.includes(r))
+  ).length;
+}
+
+// ---- 渲染逐题卡片 ----
+function renderQuestionCards(data) {
+  const questions = data.questions || [];
+  return questions.map(q => {
+    const cTag = getCognitionTag(q);
+    const cls = cardClass(cTag);
+    const tcls = tagClass(cTag);
+    const auditBadge = q.questionAudit && q.questionAudit.flag !== 'ok'
+      ? `<span class="audit-badge">⚠️ ${escapeHtml(q.questionAudit.flag)}</span>`
+      : '';
+
+    // 叙事风险区
+    let narrativeHtml = '';
+    if (q.narrativeRisks && q.narrativeRisks.length > 0) {
+      const riskBadges = q.narrativeRisks.map(r =>
+        `<span class="risk-badge ${riskBadgeClass(r)}">${escapeHtml(r)}</span>`
+      ).join(' ');
+
+      const isHighRisk = q.narrativeRisks.some(r => ['过度推断', '不懂装懂', '版本盲区'].includes(r));
+      const riskCls = isHighRisk ? 'narrative-section' : 'narrative-section warn';
+      const riskIcon = isHighRisk ? '🚨' : '⚠️';
+
+      // 从 evidence 中提取用户原话
+      const evidenceSnippet = q.evidence
+        ? q.evidence.replace(/^用户原话：/, '').substring(0, 100)
+        : '';
+
+      narrativeHtml = `
+  <div class="${riskCls}">
+    <strong>${riskIcon} 叙事风险：</strong>${riskBadges}
+    <p style="font-size:.82rem;margin-top:4px">${escapeHtml(evidenceSnippet)}</p>
+  </div>`;
+    }
+
+    // 面试安全话术
+    let safePhraseHtml = '';
+    if (q.interviewSafePhrase) {
+      safePhraseHtml = `
+  <div class="safe-phrase">
+    ${COPY.safePhraseLabel}${escapeHtml(q.interviewSafePhrase)}
+  </div>`;
+    }
+
+    // 精确表述纠正
+    let correctionHtml = '';
+    if (q.preciseCorrection) {
+      correctionHtml = `
+  <div class="safe-phrase">
+    ${COPY.preciseCorrectionLabel}${escapeHtml(q.preciseCorrection)}
+  </div>`;
+    }
+
+    // 用户原话（从 evidence 提取）
+    const userQuote = q.evidence || '';
+    // 题干摘要（从 stem 截取前60字）
+    const stemBrief = q.stem ? (q.stem.length > 60 ? q.stem.substring(0, 60) + '…' : q.stem) : '';
+    // 用户答案摘要
+    const userAnsBrief = q.userAnswer || '';
+    // 正确答案
+    const correctAns = q.correctAnswer || '';
+
+    // 逐题卡片 QA 区
+    let qaContentHtml = '';
+    if (stemBrief) {
+      qaContentHtml = `
+  <div class="qa-block">
+    <div class="q">${escapeHtml(stemBrief)}</div>
+    <div class="a">${escapeHtml(userAnsBrief)}</div>${correctAns ? `\n    <div class="correct-answer">正确答案：${escapeHtml(correctAns)}</div>` : ''}
+  </div>`;
+    }
+
+    // 归因简述
+    const attributionText = q.errorPattern ? `错误模式=${q.errorPattern}` : '理解精准';
+    const attributionDetail = q.crossCheck || '';
+
+    return `<!-- ${q.id} -->
+<div class="card ${cls}">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <strong>${escapeHtml(q.id)} · ${escapeHtml(q.category)}</strong>
+    <span class="tag ${tcls}">${escapeHtml(getCognitionLabel(q))}</span>${auditBadge}
+  </div>${qaContentHtml}
+  <p style="font-size:.85rem;color:var(--rpt-sub,#b0b0d0);margin-top:6px">
+    💬 「${escapeHtml(userQuote)}」
+  </p>
+  <p style="font-size:.82rem;color:var(--rpt-meta,#8888aa);margin-top:4px">归因：${escapeHtml(attributionText)}${attributionDetail ? ' — ' + escapeHtml(attributionDetail) : ''}</p>${narrativeHtml}${correctionHtml}${safePhraseHtml}
+</div>`;
+  }).join('\n');
+}
+
+// ---- 渲染交叉检验 ----
+function renderCrossChecks(data) {
+  const questions = data.questions || [];
+  const dimQuestions = {};
+
+  questions.forEach(q => {
+    const cat = q.category;
+    if (!dimQuestions[cat]) dimQuestions[cat] = [];
+    dimQuestions[cat].push(q);
+  });
+
+  return Object.entries(dimQuestions).map(([dim, qs]) => {
+    const tagList = qs.map(q => `${q.id} ${getCognitionLabel(q)}`).join(' + ');
+    const dimObj = Array.isArray(data.dimensions) ? data.dimensions.find(d => d.name === dim) : null;
+    const status = (dimObj && dimObj.status) || '—';
+    const detail = (dimObj && dimObj.reason) || '';
+
+    return `<div class="cross-check">
+  <span class="dim-name">${escapeHtml(dim)}</span>：${escapeHtml(tagList)} → <strong>${escapeHtml(status)}</strong><br>
+  <span style="font-size:.85rem;color:var(--rpt-sub,#b0b0d0)">${escapeHtml(detail)}</span>
+</div>`;
+  }).join('\n');
+}
+
+// ---- 渲染行动计划 ----
+function renderActionPlan(data) {
+  const plan = data.actions || [];
+  return plan.map(item => {
+    const cls = actionClass(item.priority);
+    const label = priorityLabel(item.priority);
+    const color = priorityColor(item.priority);
+
+    return `<div class="action-item ${cls}">
+  <span class="priority" style="color:${color}">${escapeHtml(label)}</span>${escapeHtml(item.category)} — ${escapeHtml(item.action)}
+  <span style="font-size:.82rem;color:var(--rpt-sub,#b0b0d0)">${escapeHtml(item.reason || '')}</span>
+</div>`;
+  }).join('\n');
+}
+
+// ---- 主渲染函数 ----
+function renderReport(data) {
+  const dims = computeDimensionScores(data);
+  const riskBadges = computeNarrativeRiskStats(data);
+  const riskSummary = computeRiskSummary(data);
+  const choiceStats = computeChoiceStats(data);
+  const totalQuestions = data.quizMeta?.totalQuestions || data.overall?.totalQuestions || (data.questions || []).length || 0;
+  const score = data.overall?.score || 0;
+  const sessionId = data.sessionId || '';
+  const title = data.title || data.quizMeta?.title || `InterviewForge 归因报告`;
+
+  // 从 sessionId 提取日期时间
+  const dateMatch = sessionId.match(/if-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/);
+  const dateTimeStr = dateMatch
+    ? `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]} ${dateMatch[4]}:${dateMatch[5]}`
+    : '';
+
+  // 维度条形图
+  const dimBarsHtml = dims.map(d => {
+    const pct = d.score;
+    const color = scoreColor(pct);
+    return `<div class="dim-bar">
+  <span class="name">${escapeHtml(d.name)}</span>
+  <div class="bar"><div class="fill" style="width:${pct}%;background:${color}"></div></div>
+  <span class="pct">${pct}%</span>
+</div>`;
+  }).join('\n');
+
+  // 叙事风险概览 badges
+  const riskBadgesHtml = riskBadges.map(b =>
+    `<span class="risk-badge ${b.cls}">${escapeHtml(b.risk)} ×${b.count}</span>`
+  ).join('\n  ');
+
+  // 雷达图 JS 数据
+  const radarDimsJson = JSON.stringify(dims);
+
+  // 逐题卡片
+  const cardsHtml = renderQuestionCards(data);
+
+  // 交叉检验
+  const crossCheckHtml = renderCrossChecks(data);
+
+  // 面试风险总结
+  const riskSummaryHtml = riskSummary.map(group => {
+    const bgColor = group.isHigh ? '#2a1a1a' : '#2a2a1a';
+    const borderColor = group.isHigh ? '#f44336' : '#ff9800';
+    const labelColor = group.isHigh ? '#ff5252' : '#ffa726';
+    const label = group.isHigh ? '危险' : '注意';
+
+    // 聚合证据
+    const evidences = group.items.map(it =>
+      `${it.id} 中发现`
+    ).join('、');
+
+    return `<div style="padding:10px;margin:6px 0;background:${bgColor};border-radius:8px;border-left:3px solid ${borderColor}">
+  <strong style="color:${labelColor}">${escapeHtml(label)}</strong>：${escapeHtml(group.risk)} — ${escapeHtml(evidences)}<br>
+  <span style="font-size:.82rem;color:var(--rpt-sub,#b0b0d0)">${escapeHtml(group.items[0]?.evidence?.substring(0, 80) || '')}</span>
+</div>`;
+  }).join('\n');
+
+  // 行动计划
+  const actionPlanHtml = renderActionPlan(data);
+
+  // 高风险题数（按题去重）
+  const highRiskCount = computeHighRiskQuestionCount(data);
+
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InterviewForge 归因报告 - ${escapeHtml(title)}</title>
+<style>
+:root{--rpt-bg:#1a1a2e;--rpt-text:#e0e0e0;--rpt-title:#7c8cf8;--rpt-h2:#a0a8e8;--rpt-h3:#c0c4f0;--rpt-meta:#8888aa;--rpt-card:#252547;--rpt-card-border:#444466;--rpt-bar:#333355;--rpt-qa:#1e1e3a;--rpt-sub:#b0b0d0}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--rpt-bg,#1a1a2e);color:var(--rpt-text,#e0e0e0);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.7;padding:24px;max-width:960px;margin:0 auto}
+h1{font-size:1.6rem;color:var(--rpt-title,#7c8cf8);margin-bottom:4px}
+h2{font-size:1.25rem;color:var(--rpt-h2,#a0a8e8);margin:28px 0 12px;border-left:3px solid var(--rpt-title,#7c8cf8);padding-left:10px}
+h3{font-size:1.05rem;color:var(--rpt-h3,#c0c4f0);margin:16px 0 8px}
+.meta{color:var(--rpt-meta,#8888aa);font-size:.85rem;margin-bottom:20px}
+.score-section{display:flex;gap:24px;margin:16px 0;flex-wrap:wrap}
+.score-card{background:var(--rpt-card,#252547);border-radius:10px;padding:20px;flex:1;min-width:200px;text-align:center}
+.score-card .big{font-size:3rem;font-weight:700;color:var(--rpt-title,#7c8cf8)}
+.score-card .label{font-size:.8rem;color:var(--rpt-meta,#8888aa);margin-top:4px}
+.dim-bar{margin:6px 0;display:flex;align-items:center;gap:8px}
+.dim-bar .name{width:80px;text-align:right;font-size:.8rem;color:var(--rpt-sub,#b0b0d0)}
+.dim-bar .bar{flex:1;background:var(--rpt-bar,#333355);border-radius:4px;height:18px;position:relative;overflow:hidden}
+.dim-bar .fill{height:100%;border-radius:4px;transition:width .3s}
+.dim-bar .pct{font-size:.75rem;color:var(--rpt-meta,#8888aa);width:36px}
+.card{background:var(--rpt-card,#252547);border-radius:10px;padding:16px;margin:12px 0;border-left:3px solid var(--rpt-card-border,#444466)}
+.card.correct{border-left-color:#4caf50}
+.card.wrong{border-left-color:#f44336}
+.card.partial{border-left-color:#ff9800}
+.tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.75rem;margin:2px 4px 2px 0}
+.tag-green{background:#2e7d3244;color:#66bb6a}
+.tag-red{background:#c6282844;color:#ef5350}
+.tag-orange{background:#e6510044;color:#ffa726}
+.tag-blue{background:#1565c044;color:#42a5f5}
+.tag-purple{background:#6a1b9a44;color:#ab47bc}
+.risk-badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:.72rem;margin:2px 4px 2px 0;font-weight:600}
+.risk-high{background:#c6282844;color:#ff5252;border:1px solid #ff525266}
+.risk-mid{background:#e6510044;color:#ffa726;border:1px solid #ffa72666}
+.risk-ok{background:#2e7d3244;color:#66bb6a;border:1px solid #66bb6a66}
+.qa-block{margin:8px 0;padding:8px 12px;background:var(--rpt-qa,#1e1e3a);border-radius:6px;font-size:.88rem}
+.qa-block .q{color:var(--rpt-h2,#a0a8e8);margin-bottom:4px}
+.qa-block .a{color:var(--rpt-text,#e0e0e0)}
+.qa-block .correct-answer{color:#66bb6a;margin-top:2px}
+.narrative-section{margin-top:8px;padding:8px 12px;background:#2a1a1a;border-radius:6px;border-left:2px solid #ff5252}
+.narrative-section.warn{background:#2a2a1a;border-left-color:#ffa726}
+.safe-phrase{background:#1a2a1a;border-left:2px solid #66bb6a;padding:8px 12px;border-radius:6px;margin-top:6px;font-size:.85rem}
+.cross-check{margin:12px 0;padding:10px 14px;background:var(--rpt-qa,#1e1e3a);border-radius:8px;border:1px solid var(--rpt-bar,#333355)}
+.cross-check .dim-name{font-weight:600;color:var(--rpt-title,#7c8cf8)}
+.action-item{padding:10px 14px;margin:8px 0;border-radius:8px;border-left:3px}
+.action-p0{background:#2a1a1a;border-left-color:#f44336}
+.action-p1{background:#2a2a1a;border-left-color:#ff9800}
+.action-p2{background:#1a2a1a;border-left-color:#4caf50}
+.action-item .priority{font-weight:700;font-size:.8rem;margin-right:8px}
+.deep-research{margin-top:28px;padding:16px;background:linear-gradient(135deg,var(--rpt-card,#252547),var(--rpt-qa,#1e1e3a));border:1px solid color-mix(in srgb,var(--rpt-title,#7c8cf8) 27%,transparent);border-radius:12px;text-align:center}
+.deep-research .emoji{font-size:1.8rem}
+.canvas-wrap{text-align:center;margin:16px 0}
+canvas{max-width:100%}
+.audit-badge{display:inline-block;padding:2px 8px;border-radius:8px;font-size:.72rem;background:#ff980033;color:#ffa726;border:1px solid #ffa72655;margin-left:6px}
+</style>
+</head>
+<body>
+
+<h1>${escapeHtml(title)}</h1>
+<p class="meta">${escapeHtml(dateTimeStr)} · ${COPY.sceneNote}</p>
+
+<!-- 综合得分区 -->
+<h2>综合得分</h2>
+<div class="score-section">
+  <div class="score-card">
+    <div class="big">${score}</div>
+    <div class="label">总分 / 100</div>
+  </div>
+  <div class="score-card">
+    <div class="big">${choiceStats.correctCount}/${choiceStats.totalCount}</div>
+    <div class="label">选择题正确${choiceStats.fallback ? '（按总体统计）' : ''}</div>
+  </div>
+  <div class="score-card">
+    <div class="big">${highRiskCount}</div>
+    <div class="label">叙事高风险题</div>
+  </div>
+</div>
+
+<!-- 维度条形图 -->
+<h3>维度得分</h3>
+${dimBarsHtml}
+
+<!-- 叙事风险概览 -->
+<h3>🚨 叙事风险概览</h3>
+<div style="display:flex;gap:12px;flex-wrap:wrap;margin:8px 0">
+  ${riskBadgesHtml}
+</div>
+
+<!-- 雷达图 -->
+<h2>维度雷达</h2>
+<div class="canvas-wrap">
+  <canvas id="radar" width="400" height="400"></canvas>
+</div>
+
+<!-- 逐题复盘 -->
+<h2>逐题复盘</h2>
+
+${cardsHtml}
+
+<!-- 交叉检验 -->
+<h2>交叉检验结论</h2>
+
+${crossCheckHtml}
+
+<!-- 面试风险总结 -->
+<h2>${COPY.riskSummaryTitle}</h2>
+<div style="margin:12px 0">
+${riskSummaryHtml}
+</div>
+
+<!-- 补强行动计划 -->
+<h2>补强行动计划</h2>
+
+${actionPlanHtml}
+
+<!-- 深度研究提议 -->
+<div class="deep-research">
+  <div class="emoji">📋</div>
+  <p style="margin-top:8px;font-size:.95rem">${COPY.ctaText}</p>
+</div>
+
+<script>
+// 雷达图
+const canvas = document.getElementById('radar');
+const _cs = getComputedStyle(document.documentElement);
+const _v = (name, fb) => (_cs.getPropertyValue(name).trim() || fb);
+const _RPT = { bar: _v('--rpt-bar','#333355'), sub: _v('--rpt-sub','#b0b0d0'), title: _v('--rpt-title','#7c8cf8') };
+const ctx = canvas.getContext('2d');
+const dims = ${radarDimsJson};
+const cx = 200, cy = 200, r = 140;
+const n = dims.length;
+const angleStep = (2 * Math.PI) / n;
+
+// 网格
+for (let ring = 1; ring <= 4; ring++) {
+  ctx.beginPath();
+  const rr = r * ring / 4;
+  for (let i = 0; i <= n; i++) {
+    const a = -Math.PI/2 + i * angleStep;
+    const x = cx + rr * Math.cos(a);
+    const y = cy + rr * Math.sin(a);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = _RPT.bar;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+// 轴线 + 标签
+dims.forEach((d, i) => {
+  const a = -Math.PI/2 + i * angleStep;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + r * Math.cos(a), cy + r * Math.sin(a));
+  ctx.strokeStyle = _RPT.bar;
+  ctx.stroke();
+  const lx = cx + (r + 24) * Math.cos(a);
+  const ly = cy + (r + 24) * Math.sin(a);
+  ctx.fillStyle = _RPT.sub;
+  ctx.font = '13px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(d.name, lx, ly);
+});
+
+// 数据区域
+ctx.beginPath();
+dims.forEach((d, i) => {
+  const a = -Math.PI/2 + i * angleStep;
+  const rr = r * d.score / 100;
+  const x = cx + rr * Math.cos(a);
+  const y = cy + rr * Math.sin(a);
+  i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+});
+ctx.closePath();
+ctx.fillStyle = 'rgba(124,140,248,0.25)';
+ctx.fill();
+ctx.strokeStyle = _RPT.title;
+ctx.lineWidth = 2;
+ctx.stroke();
+
+// 数据点
+dims.forEach((d, i) => {
+  const a = -Math.PI/2 + i * angleStep;
+  const rr = r * d.score / 100;
+  const x = cx + rr * Math.cos(a);
+  const y = cy + rr * Math.sin(a);
+  ctx.beginPath();
+  ctx.arc(x, y, 4, 0, 2 * Math.PI);
+  ctx.fillStyle = _RPT.title;
+  ctx.fill();
+});
+</script>
+
+</body>
+</html>`;
+}
+
+// ---- 主流程 ----
+function main() {
+  const { jsonPath, outputPath } = parseArgs();
+
+  // 读取 JSON
+  const raw = fs.readFileSync(jsonPath, 'utf-8');
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch (e) {
+    console.error(`Failed to parse JSON: ${e.message}`);
+    process.exit(1);
+  }
+
+  // 渲染 HTML
+  const html = renderReport(data);
+
+  // 环境字段校验闸门（源码级，防模板残留）
+  const problems = validateSource();
+  if (problems.length > 0) {
+    console.error('❌ 报告校验未通过：\n  ' + problems.join('\n  '));
+    process.exit(1);
+  }
+
+  // 写入文件
+  const outDir = path.dirname(outputPath);
+  if (!fs.existsSync(outDir)) {
+    fs.mkdirSync(outDir, { recursive: true });
+  }
+  fs.writeFileSync(outputPath, html, 'utf-8');
+
+  console.log(`✅ Report rendered: ${outputPath}`);
+}
+
+
+// ---- 环境字段校验闸门（防过时环境痕迹复发） ----
+const ENV_BLOCKLIST = ['workbuddy', 'openclaw', 'vite', 'localhost', '5199', 'interview-forge-public'];
+function validateSource() {
+  const src = fs.readFileSync(__filename, 'utf8').replace(/const ENV_BLOCKLIST[\s\S]*?];/, '');
+  const lower = String(src).toLowerCase();
+  const problems = [];
+  for (const term of ENV_BLOCKLIST) {
+    if (lower.includes(term)) problems.push('模板源码含环境痕迹: "' + term + '"');
+  }
+  return problems;
+}
+
+
+main();

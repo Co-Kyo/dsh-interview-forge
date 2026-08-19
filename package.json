@@ -1,0 +1,26 @@
+{
+  "name": "interview-forge-plugin",
+  "version": "0.1.0",
+  "description": "InterviewForge 速练：完整可分发的标准 DSH 宿主插件（出题→对话内答题→归因→雷达报告）。host 半边注册工具与服务，client 半边注册速练 UI。本地安装，随 dsh 启动加载、重启不丢。",
+  "type": "module",
+  "private": true,
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js"
+  },
+  "files": [
+    "lib",
+    "resources",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-tools": "0.1.0-rc.7"
+  },
+  "license": "MIT"
+}
