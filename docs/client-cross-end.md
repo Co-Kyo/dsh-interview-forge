@@ -39,9 +39,14 @@
 - 官方 browser roster 是 `packages/bundle/web-app/cordis.patch.yml` 内**一个具体 `- insert:` 块**（`dsh.client` 行），由 `dsh-client-modules` 扫进 `window.__DSH_BOOT__`。
 - **外部 bundle 的 `cordis.patch.yml` 是另一 patch 层/另一 insert，并列而非追加** → 自己 bundle 里写 `role: client` 并不会进入 web-app roster，client 浮层不会被 modules 收集、浏览器不可见。
 - 可行路径（下一步需选定）：
-  - A：在 **profile/`--patch` 覆盖层**向 web-app 的 roster insert 追加 forge 的 `dsh.client` 行，且 client 产物须是 `modules` 可收集的 client bundle。
-  - B：等 DSH preview 提供"外部 bundle 自带 client roster"的官方能力（当前无）。
-  - C：将 "host bundle + 对话内作答" 作为可交付 v1，浮层待上述机制成熟后再上。
+  - A：在 **profile/`--patch` 覆盖层**向 web-app 的 roster insert 追加 forge 的 `dsh.client` 行 —— ❌ **已证伪**：
+    当前 loader patch 定位基于 **行 id**（覆盖/disable/insert），而 browser roster 是无 id 的 `insert:` 块，
+    无法"按 id 追加"进该匿名块；外部 bundle 与 profile 覆盖层都插不进。
+  - A'：**改官方 `@deepseek-ai/dsh-web-app` bundle 的 roster** —— 预览期升级即被覆盖，不可持续，不推荐。
+  - B：**等 DSH 提供"外部 bundle 自带 client roster"能力**（当前 preview 无）。
+  - C：将 "host bundle + 对话内作答" 作为可交付 v1，浮层待上述机制成熟后再上 —— 当前最稳可交付。
+
+> 注：用户曾选 A；经核实其 patch 语义前提（按 id 追加 insert 块）不成立，故 A 运行时不可达，A' 可持续性差，C 为现实交付。浮层跨端若要继续，现实路径为 B（等官方）或改造官方 bundle（A'，不推荐）。
 
 ## 决策
 - 跨端坚持官方 `ctx.remote` 路径（社区带 UI 插件均此）。
