@@ -35,6 +35,14 @@
 - **无法在本机自证 client 跨端**：浏览器加载 + 重启 web 必须由用户执行；我能提供的证据 = 官方模板对照 + 构建产物 + `dump-config` loader 合成 + (若可行) 最小 spike。
 - 构建依赖：需在 forge-plugin 装 `@deepseek-ai/dsh-typert-protocol`、`zod`、tsdown/tsc 等（npm，需用户环境网络或本地已有）。
 
+## 已确认：client roster 集成的结构性缺口（决策点，勿越步）
+- 官方 browser roster 是 `packages/bundle/web-app/cordis.patch.yml` 内**一个具体 `- insert:` 块**（`dsh.client` 行），由 `dsh-client-modules` 扫进 `window.__DSH_BOOT__`。
+- **外部 bundle 的 `cordis.patch.yml` 是另一 patch 层/另一 insert，并列而非追加** → 自己 bundle 里写 `role: client` 并不会进入 web-app roster，client 浮层不会被 modules 收集、浏览器不可见。
+- 可行路径（下一步需选定）：
+  - A：在 **profile/`--patch` 覆盖层**向 web-app 的 roster insert 追加 forge 的 `dsh.client` 行，且 client 产物须是 `modules` 可收集的 client bundle。
+  - B：等 DSH preview 提供"外部 bundle 自带 client roster"的官方能力（当前无）。
+  - C：将 "host bundle + 对话内作答" 作为可交付 v1，浮层待上述机制成熟后再上。
+
 ## 决策
 - 跨端坚持官方 `ctx.remote` 路径（社区带 UI 插件均此）。
 - 若预览期此契约被判定过重，fallback：先将 "host bundle + 对话内作答" 打包为可交付 v1（不零散、随启动、数据持久），浮层作为 v2。
