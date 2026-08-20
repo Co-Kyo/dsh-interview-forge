@@ -3,7 +3,12 @@ import * as React from 'react'
 import type { Context } from '@deepseek-ai/cordis'
 import { ForgeRemoteContribution } from './forge-remote'
 
-export const inject = ['slots', 'remote', 'remote.forge']
+export const inject = ['slots', 'remote']
+// 注意：不要在这里声明 'remote.forge'。remote.<namespace> 是由本插件的
+// $mount(ForgeRemoteContribution) 安装到 client remote 服务上的（见下方 apply），
+// 而 cordis 注入解析发生在 apply 之前 —— 声明它就是自等死锁：
+// 永远等不到 → 入口 pending → web boot 报 “waiting for service: remote.forge”。
+// 正确做法：只注入 remote，在 apply 里先 await $mount，再从 ctx.get('remote.forge') 取用。
 
 interface ForgeEntry {
   sessionId: string
@@ -32,6 +37,13 @@ export async function apply(ctx: Context): Promise<void> {
   }
 
   try { await remote.$mount(ForgeRemoteContribution) } catch (e) { console.log('[forge] mount failed', e) }
+  // $mount 之后 remote.forge 才可用；显式取一次，避免依赖动态属性反射时序。
+  const forgeRemote = ctx.get('remote.forge') as unknown as {
+    list(): Promise<{ entries: ForgeEntry[] }>
+    snapshot(args: { sessionId: string }): Promise<unknown>
+    answer(args: { sessionId: string; questionId: string; selected?: string | null; note?: string | null }): Promise<{ ok: boolean }>
+    finish(args: { sessionId: string }): Promise<{ ok: boolean }>
+  }
 
   function row(e: ForgeEntry): React.ReactElement {
     return h('li', { key: e.sessionId, style: { padding: '7px 0', borderBottom: '1px solid #eee' } },
@@ -43,7 +55,8 @@ export async function apply(ctx: Context): Promise<void> {
     const [open, setOpen] = React.useState(false)
     const [entries, setEntries] = React.useState<ForgeEntry[]>([])
     React.useEffect(() => {
-      remote.forge.list().then((d) => { try { setEntries((d && d.entries) || []) } catch (e) { console.log('[forge] list err', e) } }).catch((e) => console.log('[forge] list fail', e))
+      if (!forgeRemote) return
+      forgeRemote.list().then((d) => { try { setEntries((d && d.entries) || []) } catch (e) { console.log('[forge] list err', e) } }).catch((e) => console.log('[forge] list fail', e))
     }, [])
     const panel = open
       ? h('div', { style: { position: 'absolute', right: 0, bottom: 66, width: 300, background: '#fff', border: '1px solid #d9dae2', borderRadius: 12, padding: 12, boxShadow: '0 8px 24px rgba(0,0,0,.18)' } },

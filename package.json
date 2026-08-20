@@ -32,6 +32,7 @@
   },
   "dependencies": {
     "@deepseek-ai/dsh-tools": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-typert-protocol": "0.1.0-rc.7",
     "zod": "^4.4.3"
   },
   "license": "MIT",
@@ -43,6 +44,7 @@
     "typescript": "^5.9.3"
   },
   "scripts": {
-    "build:client": "node scripts/build-client.mjs"
+    "build:client": "node scripts/build-client.mjs",
+    "build:host": "node scripts/build-host.mjs"
   }
 }
