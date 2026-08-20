@@ -3,7 +3,7 @@ import * as React from 'react'
 import type { Context } from '@deepseek-ai/cordis'
 import { ForgeRemoteContribution } from './forge-remote'
 
-export const inject = ['slots', 'remote']
+export const inject = ['slots', 'remote', 'remote.forge']
 
 interface ForgeEntry {
   sessionId: string
