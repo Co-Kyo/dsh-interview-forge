@@ -31,7 +31,8 @@
     }
   },
   "dependencies": {
-    "@deepseek-ai/dsh-tools": "0.1.0-rc.7"
+    "@deepseek-ai/dsh-tools": "0.1.0-rc.7",
+    "zod": "^4.4.3"
   },
   "license": "MIT",
   "devDependencies": {
