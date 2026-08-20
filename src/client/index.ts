@@ -66,7 +66,11 @@ export async function apply(ctx: Context): Promise<void> {
 
   const remote = ctx.get('remote') as unknown as { $mount(c: unknown): Promise<unknown> }
   await remote.$mount(ForgeRemoteContribution)
-  const forgeRpc = (ctx.get('remote') as unknown as { forge: ForgeRpc }).forge
+  // 必须用点分键取命名空间：cordis 的 traceable 代理对“未声明注入的嵌套属性”会拦截
+  // （报 cannot get property "remote.forge" without inject）。
+  // (ctx.get('remote')).forge 就是这种嵌套属性访问 —— 服务已注册也会被门禁拦下；
+  // 而 ctx.get('remote.forge') 直接读服务注册表，服务存在即放行。
+  const forgeRpc = ctx.get('remote.forge') as unknown as ForgeRpc
 
   const slots = ctx.get('slots') as unknown as {
     inject(name: string, fn: () => unknown): unknown
