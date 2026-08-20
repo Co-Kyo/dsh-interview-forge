@@ -51,3 +51,14 @@
 ## 决策
 - 跨端坚持官方 `ctx.remote` 路径（社区带 UI 插件均此）。
 - 若预览期此契约被判定过重，fallback：先将 "host bundle + 对话内作答" 打包为可交付 v1（不零散、随启动、数据持久），浮层作为 v2。
+
+## ⚠️ 更正（2026-08-19 定案）：此前"roster 缺口"结论是错的
+读 `dsh-client-modules` 源码（packages/client/modules/src/index.ts）后确认：
+- **browser roster 的判定 = 包声明**：modules 的 node half "scans the host Loader's entries
+  for **packages declaring `dsh.client`**"，不是 web-app 的 insert 块。
+- **外部 bundle 完全可行**：package.json 声明 `dsh.client: { platform: "web", inject: [...] }`
+  + exports `./client` → `lib/client.js`（`__ModuleLoader__.load({id, factory(require){…}})` 形态，
+  externals 走浏览器 module table），包一经 loader 加载即被收集进 `window.__DSH_BOOT__`。
+- 已实现并构建：`src/client/index.ts`（shell.overlay 浮层 + ctx.remote.forge.list）→
+  esbuild 产出 `lib/client.js`（3.7KB，形态与官方 tsdown clientBundle 一致）；host 半边仍在 `lib/index.js`。
+- 之前的 A 证伪与 A'/B/C 决策**作废**；A 的"按 id 追加 insert"虽不成立，但**无需该路径**。

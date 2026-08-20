@@ -6,7 +6,10 @@
   "private": true,
   "main": "lib/index.js",
   "exports": {
-    ".": "./lib/index.js"
+    ".": "./lib/index.js",
+    "./client": {
+      "default": "./lib/client.js"
+    }
   },
   "files": [
     "lib",
@@ -17,6 +20,13 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-api-remotes"
+      ]
     }
   },
   "dependencies": {
@@ -26,7 +36,11 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@types/react": "^18.3.31",
+    "esbuild": "^0.28.2",
     "react": "^18.3.1",
     "typescript": "^5.9.3"
+  },
+  "scripts": {
+    "build:client": "node scripts/build-client.mjs"
   }
 }
