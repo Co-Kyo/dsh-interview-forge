@@ -42,3 +42,19 @@
 - host 半边随 dsh 启动常驻（已探针验证）。浮层 client 为 DSH preview 缺少"外部 bundle 自带 browser roster"能力而**延后**（B/C 决策见 client-cross-end.md）。
 - 安装：`dsh plugin --profile web add ./interview-forge-plugin-0.1.0.tgz`（或用 profile 现有本地 link + cordis.patch.yml 的 interview-forge 行）；重启 dsh 生效。
 - 重启后验证：常规会话可见 `forge_*`；对 agent 说「开始练习」进入对话内速练闭环。
+
+## ✅ 重大达成：浮层静态化全链路闭环（2026-08-20）
+- **机制打通**：`dsh.client` 包声明（package.json + exports["./client"]）→ modules 收集 → `__DSH_BOOT__`
+  → 浏览器加载 → `shell.overlay` slot 渲染。与社区 UI 插件同一机制。
+- **host ForgeGateway**：`lib/forge-gateway.js`（TypertRemoteService 'forge'，10 个 @Remote），
+  `lib/index.js apply` 中 `ctx.plugin(ForgeGateway)` 注册；esbuild 编译（装饰器语义 + typert-protocol
+  external + node_modules symlink 保证 @Remote marker WeakMap 同实例）。
+- **client remote.forge**：`src/client/forge-remote.ts` descriptors + apply 内 `await remote.$mount(...)`
+  后经 `ctx.get('remote.forge')` 取用（**勿在 inject 声明 remote.forge** —— 自等死锁，见 6afeb0d 注释）。
+- **host api-gateway SRC 回退**路由 `forge/<method>`，无需生成 ./typert 产物。
+- 用户已确认：**右下角浮层正常显示**。
+- 剩余：ForgeGateway 接入 store（list/snapshot/answer/finish 返回真实会话数据）+ 浮层答题交互接线。
+
+## 待办（下一棒）
+- [ ] ForgeGateway 方法接入 store（list 返回真实 entries；snapshot/load/answer/finish/report/history 操作 store/磁盘）
+- [ ] 浮层 UI 补全：会话详情/答题视图（读题→提交 answer→完成 finish→报告 report）
