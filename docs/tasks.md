@@ -71,3 +71,20 @@
     「内存命中 → 磁盘水合」；report 改为多根遍历。
 - **验证**：`scripts/smoke-disk-recovery.mjs`（模拟重启后干净 store）→ 19 条历史全部发现；
   未完成场水合 status=answering；已报告场 reportHtml 16911 字符。生效需重启 dsh web。
+## 🐛 E2E 驱动的三层修复：浮层队列空 + 答题视图崩溃（2026-08-21 续）
+- **方法论升级**：引入真浏览器分层 E2E（`e2e-lab/`，playwright-core + 本机缓存 chromium，7+5 层 pass/fail 指标），
+  告别「改→重启→肉眼猜」。每层可独立判定：boot 清单 → 模块执行诊断点 → FAB → 页面内 RPC → 面板 → 队列 → 答题视图。
+- **第一层（client 信封不解包）**：抓包证明 wire 层 ok:true+19 条完整返回，但 SDK resolve 的是整个
+  `{ok,value}` 信封 → `d.entries` 永远 undefined → 队列恒「暂无练习」。修复：`unwrapEnvelope`
+  （{ok,value}→value；ok:false 转 reject 让面板能显示错误）。
+- **第二层（descriptor 缺 6 个）**：host 声明 10 个 @Remote，client contribution 只有 4 个
+  （缺 load/applySeed/nav/pause/resume/report）→ 点开作答中会话时 `applySeed is not a function`
+  → **slot 树整体崩溃卸载（即「答题选项出不来」的直接根因）**。补齐 6 个 descriptor。
+- **第三层（Proxy 防御）**：解包 Proxy 对 symbol/非函数属性也返回包装函数，React 内部探测即崩。
+  改为仅真方法包装、其余透传。
+- **附带修复**：hydrateEntry 并发竞态（applySeed/load/snapshot 同时触发水合 → order 重复 push → 队列重复行）
+  插入前同步重查 + list() 按 sid 去重兜底。
+- **诊断基建**：client 内置 `window.__FORGE_DIAG__`（apply 各步骤 + list 原始返回值 + FAB 计数徽标），
+  现场排查只需刷新后读一个全局变量。
+- **验证**：`overlay.e2e.mjs` 7/7、`quiz.e2e.mjs` 5/5（题干/4 选项/理由框/进度头/截图）。
+  override.js 报错证实为浏览器扩展噪音（干净浏览器 0 出现；服务端无此文件）。

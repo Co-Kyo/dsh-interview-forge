@@ -56,7 +56,27 @@ const CSS = [
   '.forge-fab{position:fixed;right:22px;bottom:22px;width:56px;height:56px;border-radius:50%;border:none;background:#2f6bff;color:#fff;font-size:22px;cursor:pointer;box-shadow:0 6px 18px rgba(47,107,255,.4);z-index:2000}',
 ].join('\n')
 
+// ---- 可量化诊断：window.__FORGE_DIAG__ 记录模块执行各步骤（E2E 与现场排查用） ----
+const DIAG: { start: number; steps: { t: number; name: string; extra?: string }[]; fatal?: string } = { start: Date.now(), steps: [] }
+try { (window as unknown as { __FORGE_DIAG__: unknown }).__FORGE_DIAG__ = DIAG } catch { /* noop */ }
+/** 解包 server-response 信封：{ok,value}→value；ok:false 转 reject（E2E 实测 SDK 不解包）。 */
+function unwrapEnvelope<T>(v: T): T {
+  if (v && typeof v === 'object' && 'ok' in (v as Record<string, unknown>)) {
+    const env = v as unknown as { ok: boolean; value?: unknown; error?: { message?: string } }
+    if (env.ok === false) throw new Error(env.error?.message || 'forge RPC 返回失败')
+    return env.value as T
+  }
+  return v
+}
+
+function dstep(name: string, extra?: string): void {
+  DIAG.steps.push({ t: Date.now() - DIAG.start, name, extra })
+  if (DIAG.steps.length > 80) DIAG.steps.splice(0, DIAG.steps.length - 80)
+  try { (window as unknown as { __FORGE_DIAG__: unknown }).__FORGE_DIAG__ = DIAG; console.info('[forge-diag]', name, extra ?? '') } catch { /* noop */ }
+}
+
 export async function apply(ctx: Context): Promise<void> {
+  dstep('apply:enter')
   // 注入 CSS
   try {
     const style = document.createElement('style')
@@ -65,12 +85,24 @@ export async function apply(ctx: Context): Promise<void> {
   } catch { /* no-op */ }
 
   const remote = ctx.get('remote') as unknown as { $mount(c: unknown): Promise<unknown> }
-  await remote.$mount(ForgeRemoteContribution)
+  try { await remote.$mount(ForgeRemoteContribution); dstep('mount:ok') } catch (e) { dstep('mount:fail', String(e)); DIAG.fatal = 'mount: ' + String(e) }
   // 必须用点分键取命名空间：cordis 的 traceable 代理对“未声明注入的嵌套属性”会拦截
   // （报 cannot get property "remote.forge" without inject）。
   // (ctx.get('remote')).forge 就是这种嵌套属性访问 —— 服务已注册也会被门禁拦下；
   // 而 ctx.get('remote.forge') 直接读服务注册表，服务存在即放行。
-  const forgeRpc = ctx.get('remote.forge') as unknown as ForgeRpc
+  const forgeRpcRaw = ctx.get('remote.forge') as unknown as ForgeRpc
+  // SDK 返回的是完整信封（见 unwrapEnvelope 注释），这里对方法统一解包。
+  // 防御式 Proxy：symbol/非函数属性原样透传（React 内部探测不可当方法调用，否则 slot 树崩溃）。
+  const forgeRpc = new Proxy({} as ForgeRpc, {
+    get(_t, m: string | symbol) {
+      if (typeof m === 'symbol') return undefined
+      const fn = (forgeRpcRaw as unknown as Record<string, unknown>)[m]
+      if (typeof fn !== 'function') return fn
+      return (...args: unknown[]) =>
+        (fn as (...a: unknown[]) => Promise<unknown>).apply(forgeRpcRaw, args).then(unwrapEnvelope)
+    },
+  })
+  dstep('rpc:namespace-ready')
 
   const slots = ctx.get('slots') as unknown as {
     inject(name: string, fn: () => unknown): unknown
@@ -83,7 +115,7 @@ export async function apply(ctx: Context): Promise<void> {
     const [err, setErr] = React.useState('')
     const [quizView, setQuizView] = React.useState<{ sessionId: string } | null>(null)
     const [reportView, setReportView] = React.useState<{ sessionId: string; title: string } | null>(null)
-    const refresh = () => { forgeRpc.list().then((d) => { setErr(''); setEntries((d && d.entries) || []) }).catch((e) => setErr(String(e && e.message || e))) }
+    const refresh = () => { forgeRpc.list().then((d) => { setErr(''); const n = (d && d.entries) || []; setEntries(n); dstep('list:ok', 'entries=' + n.length + ' raw=' + (d ? JSON.stringify(d).slice(0, 140) : 'RESOLVED_NULL')) }).catch((e) => { const m = String(e && e.message || e); setErr(m); dstep('list:err', m) }) }
     React.useEffect(() => { refresh(); const iv = window.setInterval(refresh, 3000); return () => window.clearInterval(iv) }, [])
 
     const panel = open
@@ -110,7 +142,7 @@ export async function apply(ctx: Context): Promise<void> {
       : null
 
     return h('div', null,
-      h('button', { className: 'forge-fab', onClick: () => setOpen((o) => !o), title: 'InterviewForge 速练' }, '⚡'),
+      h('button', { className: 'forge-fab', onClick: () => setOpen((o) => !o), title: 'InterviewForge 速练' + (entries.length ? '（' + entries.length + ' 场）' : '') }, '⚡' + (entries.length ? String(entries.length) : '')),
       panel,
       quizView ? h(QuizRunner, { rpc: forgeRpc, sessionId: quizView.sessionId, onClose: () => { setQuizView(null); refresh() } }) : null,
       reportView ? h(ReportView, { rpc: forgeRpc, sessionId: reportView.sessionId, title: reportView.title, onClose: () => { setReportView(null); refresh() } }) : null)
@@ -183,4 +215,5 @@ export async function apply(ctx: Context): Promise<void> {
 
   slots.inject('shell.overlay', () =>
     slots.register({ name: 'shell.overlay', id: 'forge-overlay', order: 65 }, () => h(fabView, null)))
+  dstep('slot:registered')
 }

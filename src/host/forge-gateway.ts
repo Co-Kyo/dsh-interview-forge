@@ -206,6 +206,8 @@ export async function hydrateEntry(ctx: Context, sid: string): Promise<ForgeEntr
       progress: freshProgress() as ForgeEntryLike['progress'],
       seeded: !!result,
     }
+    // 并发竞态防护：applySeed/load/snapshot 可能同时触发水合，插入前同步重查（check+set 同步原子）
+    if (store.sessions.has(sid)) return store.sessions.get(sid)
     store.sessions.set(sid, entry)
     store.order.push(sid)
     if (!store.lastArchiveDir) store.lastArchiveDir = root
@@ -252,9 +254,12 @@ export class ForgeGateway extends TypertRemoteService {
   @Remote('list')
   async list(): Promise<{ entries: ReturnType<typeof toListItem>[] }> {
     const entries: ReturnType<typeof toListItem>[] = []
+    const seenOrder = new Set<string>()
     for (let i = store.order.length - 1; i >= 0; i--) {
-      const e = store.sessions.get(store.order[i])
-      if (e) entries.push(toListItem(e))
+      const sid = store.order[i]
+      if (seenOrder.has(sid)) continue
+      const e = store.sessions.get(sid)
+      if (e) { seenOrder.add(sid); entries.push(toListItem(e)) }
     }
     const have = new Set(entries.map((e) => e.sessionId))
     for (const d of await diskEntries(this.ctx)) if (!have.has(d.sessionId)) { entries.push(d); have.add(d.sessionId) }
