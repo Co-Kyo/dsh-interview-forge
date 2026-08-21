@@ -30,32 +30,34 @@ function h(type: unknown, props: unknown | null, ...children: React.ReactNode[])
 }
 
 const CSS = [
-  '.forge-panel{position:fixed;right:22px;bottom:88px;width:330px;max-height:62vh;background:#fff;border:1px solid #d9dae2;border-radius:12px;box-shadow:0 10px 34px rgba(0,0,0,.12);z-index:1290;display:flex;flex-direction:column;overflow:hidden}',
-  '.forge-panel-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid #eee;font-weight:600;font-size:14px}',
+  // 颜色全部走 DSW 主题令牌（定义在 body 上，随 body[data-ds-dark-theme] 翻转），
+  // 浅色回退值 = 原硬编码色，令牌缺失时外观不变。
+  '.forge-panel{position:fixed;right:22px;bottom:88px;width:330px;max-height:62vh;background:var(--dsw-alias-bg-base,#fff);color:var(--dsw-alias-label-primary,#1c1c22);border:1px solid var(--dsw-alias-border-l2,#d9dae2);border-radius:12px;box-shadow:0 10px 34px rgba(0,0,0,.12);z-index:1290;display:flex;flex-direction:column;overflow:hidden}',
+  '.forge-panel-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--dsw-alias-border-l1,#eee);font-weight:600;font-size:14px}',
   '.forge-list{overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:8px}',
-  '.forge-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f2f3f7;border:1px solid #e8e9ef;border-radius:10px;cursor:pointer}',
-  '.forge-item:hover{border-color:#b9bac8}',
+  '.forge-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--dsw-alias-bg-module-platform,#f2f3f7);border:1px solid var(--dsw-alias-border-l2,#e8e9ef);border-radius:10px;cursor:pointer}',
+  '.forge-item:hover{border-color:var(--dsw-alias-border-l4,#b9bac8)}',
   '.forge-item .t{flex:1;min-width:0;font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-  '.forge-item .s{font-size:11px;color:#8b8b9a;margin-top:2px}',
+  '.forge-item .s{font-size:11px;color:var(--dsw-alias-label-tertiary,#8b8b9a);margin-top:2px}',
   '.forge-badge{font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;flex-shrink:0}',
-  '.b-answering{background:#2f6bff22;color:#2f6bff}.b-reported{background:#1f9d5522;color:#1f9d55}.b-done{background:#d99a0022;color:#d99a00}',
-  '.forge-modal{position:fixed;inset:0;background:rgba(0,0,0,.48);z-index:1400;display:flex;align-items:center;justify-content:center}',
-  '.forge-card{width:min(760px,94vw);height:min(88vh,900px);background:#fff;border-radius:16px;display:flex;flex-direction:column;overflow:hidden}',
-  '.forge-card-head{display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-bottom:1px solid #eee;font-size:13px;color:#565664;flex-shrink:0}',
+  '.b-answering{background:#2f6bff22;color:var(--dsw-alias-brand-primary-new-colorprimary-new-color,#2f6bff)}.b-reported{background:#1f9d5522;color:var(--dsw-alias-state-success-primary,#1f9d55)}.b-done{background:#d99a0022;color:var(--dsw-alias-state-warn-primary,#d99a00)}',
+  '.forge-modal{position:fixed;inset:0;background:var(--dsw-alias-bg-mask-1,rgba(0,0,0,.48));z-index:1400;display:flex;align-items:center;justify-content:center}',
+  '.forge-card{width:min(760px,94vw);height:min(88vh,900px);background:var(--dsw-alias-bg-base,#fff);color:var(--dsw-alias-label-primary,#1c1c22);border-radius:16px;display:flex;flex-direction:column;overflow:hidden}',
+  '.forge-card-head{display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-bottom:1px solid var(--dsw-alias-border-l1,#eee);font-size:13px;color:var(--dsw-alias-label-secondary,#565664);flex-shrink:0}',
   '.forge-body{flex:1;overflow:auto;padding:20px 24px}',
-  '.forge-q{padding:16px 20px;background:#f2f3f7;border:1px solid #e8e9ef;border-radius:12px;margin-bottom:6px}',
+  '.forge-q{padding:16px 20px;background:var(--dsw-alias-bg-module-platform,#f2f3f7);border:1px solid var(--dsw-alias-border-l2,#e8e9ef);border-radius:12px;margin-bottom:6px}',
   '.forge-type{display:inline-block;padding:2px 10px;border-radius:4px;font-size:12px;font-weight:700;margin-bottom:12px}',
-  '.forge-t-choice{background:#d99a00;color:#fff}.forge-t-open{background:#1f9d55;color:#fff}',
+  '.forge-t-choice{background:var(--dsw-alias-state-warn-primary,#d99a00);color:#fff}.forge-t-open{background:var(--dsw-alias-state-success-primary,#1f9d55);color:#fff}',
   '.forge-stem{font-size:16px;font-weight:600;line-height:1.7;white-space:pre-wrap}',
-  '.forge-opt{display:flex;gap:12px;padding:12px 14px;background:#fff;border:2px solid #d9dae2;border-radius:10px;cursor:pointer;margin-top:8px}',
-  '.forge-opt.sel{border-color:#2f6bff;background:#2f6bff14}',
-  '.forge-opt .k{width:24px;height:24px;border-radius:50%;background:#e8e9ef;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0}',
-  '.forge-txt{width:100%;min-height:120px;margin-top:12px;padding:12px;border:1px solid #d9dae2;border-radius:10px;font-size:14px;line-height:1.7;resize:vertical}',
+  '.forge-opt{display:flex;gap:12px;padding:12px 14px;background:var(--dsw-specific-input-major,var(--dsw-alias-bg-base,#fff));border:2px solid var(--dsw-alias-border-l2,#d9dae2);border-radius:10px;cursor:pointer;margin-top:8px}',
+  '.forge-opt.sel{border-color:var(--dsw-alias-brand-primary-new-colorprimary-new-color,#2f6bff);background:#2f6bff14}',
+  '.forge-opt .k{width:24px;height:24px;border-radius:50%;background:var(--dsw-alias-bg-module-platform,#e8e9ef);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0}',
+  '.forge-txt{width:100%;min-height:120px;margin-top:12px;padding:12px;background:var(--dsw-specific-input-major,var(--dsw-alias-bg-base,#fff));color:var(--dsw-alias-label-primary,#1c1c22);border:1px solid var(--dsw-alias-border-l2,#d9dae2);border-radius:10px;font-size:14px;line-height:1.7;resize:vertical}',
   '.forge-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}',
-  '.forge-btn{padding:9px 18px;border:1px solid #d9dae2;border-radius:8px;font-size:14px;cursor:pointer;background:#fff}',
-  '.forge-btn.primary{background:#2f6bff;border-color:#2f6bff;color:#fff;font-weight:600}',
-  '.forge-btn.accent{background:#1f9d55;border-color:#1f9d55;color:#fff;font-weight:600}',
-  '.forge-empty{color:#8b8b9a;font-size:13px;text-align:center;padding:18px 10px}',
+  '.forge-btn{padding:9px 18px;border:1px solid var(--dsw-alias-border-l2,#d9dae2);border-radius:8px;font-size:14px;cursor:pointer;background:var(--dsw-alias-button-elevated-fill,var(--dsw-alias-bg-base,#fff));color:var(--dsw-alias-label-primary,#1c1c22)}',
+  '.forge-btn.primary{background:var(--dsw-alias-brand-primary-new-colorprimary-new-color,#2f6bff);border-color:transparent;color:#fff;font-weight:600}',
+  '.forge-btn.accent{background:var(--dsw-alias-state-success-primary,#1f9d55);border-color:transparent;color:#fff;font-weight:600}',
+  '.forge-empty{color:var(--dsw-alias-label-tertiary,#8b8b9a);font-size:13px;text-align:center;padding:18px 10px}',
   '.forge-fab{position:fixed;right:22px;bottom:22px;width:56px;height:56px;border-radius:50%;border:none;background:var(--dsw-alias-brand-primary-new-colorprimary-new-color,#2f6bff);color:#fff;font-size:22px;cursor:pointer;box-shadow:0 6px 20px color-mix(in srgb,var(--dsw-alias-brand-primary-new-colorprimary-new-color,#2f6bff) 45%,transparent);z-index:1300;display:flex;align-items:center;justify-content:center;pointer-events:auto;transition:transform .15s}',
   '.forge-fab:hover{transform:scale(1.06)}',
   '.forge-fab-badge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;border-radius:10px;background:var(--dsw-alias-state-error-primary,#d93045);color:var(--dsw-alias-bg-base,#fff);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 5px;border:2px solid var(--dsw-alias-bg-base,#fff)}',
@@ -64,22 +66,22 @@ const CSS = [
   '.forge-cal-nav{display:flex;align-items:center;gap:10px;margin-bottom:10px}',
   '.forge-cal-title{flex:1;text-align:center;font-weight:600;font-size:14px}',
   '.forge-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}',
-  '.forge-cal-dow{font-size:11px;color:#8b8b9a;text-align:center;padding:2px 0 6px;font-weight:600}',
-  '.forge-cal-cell{position:relative;height:46px;background:#f2f3f7;border:1px solid #e8e9ef;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#565664;cursor:pointer}',
-  '.forge-cal-cell:hover{border-color:#b9bac8}',
+  '.forge-cal-dow{font-size:11px;color:var(--dsw-alias-label-tertiary,#8b8b9a);text-align:center;padding:2px 0 6px;font-weight:600}',
+  '.forge-cal-cell{position:relative;height:46px;background:var(--dsw-alias-bg-module-platform,#f2f3f7);border:1px solid var(--dsw-alias-border-l2,#e8e9ef);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--dsw-alias-label-secondary,#565664);cursor:pointer}',
+  '.forge-cal-cell:hover{border-color:var(--dsw-alias-border-l4,#b9bac8)}',
   '.forge-cal-cell.empty{background:transparent;border:none;cursor:default}',
-  '.forge-cal-cell.has{background:#2f6bff0d;border-color:#b9cffd;color:#2f6bff;font-weight:700}',
-  '.forge-cal-cell.sel{border-color:#2f6bff;background:#2f6bff1a;box-shadow:0 0 0 1px #2f6bff66}',
-  '.forge-cal-cell.today::after{content:"";position:absolute;bottom:4px;left:50%;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:#1f9d55}',
-  '.forge-cal-count{position:absolute;top:3px;right:5px;font-size:10px;line-height:1.2;font-weight:700;color:#2f6bff}',
-  '.forge-sum{display:flex;gap:16px;flex-wrap:wrap;padding:9px 12px;background:#f6f7fb;border:1px solid #e8e9ef;border-radius:10px;font-size:12px;color:#565664;margin-top:12px}',
-  '.forge-sum b{color:#2f6bff;font-weight:700}',
+  '.forge-cal-cell.has{background:#2f6bff0d;border-color:var(--dsw-alias-brand-primary-new-colorprimary-new-color,#b9cffd);color:var(--dsw-alias-brand-primary-new-colorprimary-new-color,#2f6bff);font-weight:700}',
+  '.forge-cal-cell.sel{border-color:var(--dsw-alias-brand-primary-new-colorprimary-new-color,#2f6bff);background:#2f6bff1a;box-shadow:0 0 0 1px #2f6bff66}',
+  '.forge-cal-cell.today::after{content:"";position:absolute;bottom:4px;left:50%;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:var(--dsw-alias-state-success-primary,#1f9d55)}',
+  '.forge-cal-count{position:absolute;top:3px;right:5px;font-size:10px;line-height:1.2;font-weight:700;color:var(--dsw-alias-brand-primary-new-colorprimary-new-color,#2f6bff)}',
+  '.forge-sum{display:flex;gap:16px;flex-wrap:wrap;padding:9px 12px;background:var(--dsw-alias-bg-module-platform,#f6f7fb);border:1px solid var(--dsw-alias-border-l2,#e8e9ef);border-radius:10px;font-size:12px;color:var(--dsw-alias-label-secondary,#565664);margin-top:12px}',
+  '.forge-sum b{color:var(--dsw-alias-brand-primary-new-colorprimary-new-color,#2f6bff);font-weight:700}',
   '.forge-hist-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}',
-  '.forge-hist-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f2f3f7;border:1px solid #e8e9ef;border-radius:10px;cursor:pointer}',
-  '.forge-hist-item:hover{border-color:#b9bac8}',
+  '.forge-hist-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--dsw-alias-bg-module-platform,#f2f3f7);border:1px solid var(--dsw-alias-border-l2,#e8e9ef);border-radius:10px;cursor:pointer}',
+  '.forge-hist-item:hover{border-color:var(--dsw-alias-border-l4,#b9bac8)}',
   '.forge-hist-info{flex:1;min-width:0}',
   '.forge-hist-title{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-  '.forge-hist-sub{font-size:11px;color:#8b8b9a;margin-top:2px}',
+  '.forge-hist-sub{font-size:11px;color:var(--dsw-alias-label-tertiary,#8b8b9a);margin-top:2px}',
 ].join('\n')
 
 // ---- 可量化诊断：window.__FORGE_DIAG__ 记录模块执行各步骤（E2E 与现场排查用） ----
@@ -244,14 +246,43 @@ export async function apply(ctx: Context): Promise<void> {
               h('button', { className: 'forge-btn accent', disabled: !canSubmit, onClick: submit }, isLast ? '完成练习' : '提交并下一题'))))))
   }
 
+  // ---- 主题同步：读 body 上的 DSW 令牌（随 body[data-ds-dark-theme] 翻转） ----
+  function resolveVar(name: string, fallback: string): string {
+    try {
+      const v = getComputedStyle(document.body).getPropertyValue(name).trim()
+      return v || fallback
+    } catch { return fallback }
+  }
+  /** 把当前主题解析为 --rpt-* 注入报告 HTML（对齐 v29 themeReportHtml）。
+   *  模板自带深蓝 :root 默认值，故用 !important 保证应用主题覆盖它。 */
+  function themeReportHtml(html: string): string {
+    const bg = resolveVar('--dsw-alias-bg-base', '#ffffff')
+    const text = resolveVar('--dsw-alias-label-primary', '#1c1c22')
+    const secondary = resolveVar('--dsw-alias-label-secondary', '#565664')
+    const card = resolveVar('--dsw-alias-bg-module-platform', '#f2f3f7')
+    const qa = resolveVar('--dsw-alias-bg-layer-2', '#e8e9ef')
+    const border = resolveVar('--dsw-alias-border-l2', '#d9dae2')
+    const brand = resolveVar('--dsw-alias-brand-primary-new-colorprimary-new-color', '#2f6bff')
+    const css = ':root{--rpt-bg:' + bg + ' !important;--rpt-text:' + text + ' !important;--rpt-title:' + brand + ' !important;--rpt-h2:' + brand + ' !important;--rpt-h3:' + text + ' !important;--rpt-meta:' + secondary + ' !important;--rpt-card:' + card + ' !important;--rpt-card-border:' + border + ' !important;--rpt-bar:' + border + ' !important;--rpt-qa:' + qa + ' !important;--rpt-sub:' + secondary + ' !important}'
+    return html.replace('<style>', '<style>' + css)
+  }
+
   function ReportView(props: { rpc: ForgeRpc; sessionId: string; title: string; onClose: () => void }): React.ReactElement {
     const [html, setHtml] = React.useState<string | null>(null)
+    const [themeTick, setThemeTick] = React.useState(0)
     React.useEffect(() => { props.rpc.report({ sessionId: props.sessionId }).then((d) => setHtml((d && d.reportHtml) || null)).catch(() => setHtml(null)) }, [props.sessionId])
+    // 跟随 web 端深浅切换：观察 body 的 data-ds-dark-theme 属性变化，重解析并重载 iframe。
+    React.useEffect(() => {
+      const ob = new MutationObserver(() => setThemeTick((n) => n + 1))
+      try { ob.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme'] }) } catch { /* noop */ }
+      return () => ob.disconnect()
+    }, [])
+    const themed = html ? themeReportHtml(html) : null
     return h('div', { className: 'forge-modal' },
       h('div', { className: 'forge-card' },
         h('div', { className: 'forge-card-head' }, h('span', null, '📊 反馈报告 · ' + props.title), h('button', { className: 'forge-btn', onClick: props.onClose }, '✕ 关闭')),
-        html
-          ? h('iframe', { style: { flex: 1, border: 'none', width: '100%', height: '100%' }, srcDoc: html, sandbox: 'allow-scripts' })
+        themed
+          ? h('iframe', { key: themeTick, style: { flex: 1, border: 'none', width: '100%', height: '100%' }, srcDoc: themed, sandbox: 'allow-scripts' })
           : h('div', { className: 'forge-empty' }, '报告尚未生成或读取失败')))
   }
 
