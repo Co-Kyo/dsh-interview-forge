@@ -80,9 +80,10 @@ export async function apply(ctx: Context): Promise<void> {
   function fabView(): React.ReactElement {
     const [open, setOpen] = React.useState(false)
     const [entries, setEntries] = React.useState<ForgeEntry[]>([])
+    const [err, setErr] = React.useState('')
     const [quizView, setQuizView] = React.useState<{ sessionId: string } | null>(null)
     const [reportView, setReportView] = React.useState<{ sessionId: string; title: string } | null>(null)
-    const refresh = () => { forgeRpc.list().then((d) => setEntries((d && d.entries) || [])).catch(() => {}) }
+    const refresh = () => { forgeRpc.list().then((d) => { setErr(''); setEntries((d && d.entries) || []) }).catch((e) => setErr(String(e && e.message || e))) }
     React.useEffect(() => { refresh(); const iv = window.setInterval(refresh, 3000); return () => window.clearInterval(iv) }, [])
 
     const panel = open
@@ -91,7 +92,10 @@ export async function apply(ctx: Context): Promise<void> {
             h('span', null, '⚡ InterviewForge 速练'),
             h('button', { className: 'forge-btn', onClick: () => setOpen(false), style: { padding: '2px 8px' } }, '收起')),
           h('div', { className: 'forge-list' },
-            entries.length === 0
+            err
+              ? h('div', { style: { color: '#d93045', fontSize: 12, whiteSpace: 'pre-wrap', padding: '6px 2px' } }, 'LIST 错误: ' + err)
+              : null,
+            err === '' && entries.length === 0
               ? h('div', { className: 'forge-empty' }, '暂无练习。对 Agent 说「开始练习」即可。')
               : entries.map((e) => {
                   const cls = e.status === 'reported' ? 'b-reported' : (e.status === 'submitted' ? 'b-done' : 'b-answering')
