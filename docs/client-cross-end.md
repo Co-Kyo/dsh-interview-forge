@@ -62,3 +62,15 @@
 - 已实现并构建：`src/client/index.ts`（shell.overlay 浮层 + ctx.remote.forge.list）→
   esbuild 产出 `lib/client.js`（3.7KB，形态与官方 tsdown clientBundle 一致）；host 半边仍在 `lib/index.js`。
 - 之前的 A 证伪与 A'/B/C 决策**作废**；A 的"按 id 追加 insert"虽不成立，但**无需该路径**。
+
+## ⚠️ 关键坑（已修复）：dsh-typert-protocol / cordis 必须与 host 同一物理实例
+- 症状：client 调 `remote.forge.list()` → `POST /api/forge/list 404`。
+- 根因：api-gateway 的 SRC 回退（collectSrcClaims）遍历 `ctx.reflect.props` 的服务，
+  读实例的 `typertRemote` binding + `remoteMethods(original)`（@Remote markers）。
+  markers 存活在 **dsh-typert-protocol 模块实例的 WeakMap** 里；若 forge-plugin 自己
+  node_modules 里的副本与 host 进程（npx 目录）不是同一物理实例 → markers 不共享 →
+  claims 无 `forge/*` → claimsEndpoint false → 404。cordis 同理（symbols.original）。
+- 修复：`forge-plugin/node_modules/@deepseek-ai/{dsh-typert-protocol,cordis}` symlink 到
+  host 进程实际使用的物理目录（npx node_modules），保证同实例。
+- 排错利器：`curl -s http://127.0.0.1:3080/plugins/<pkg>/client.js`（serve 是否最新）、
+  首页 `__DSH_BOOT__` 条目、F12 Network 的 `/api/forge/*` 状态码。
