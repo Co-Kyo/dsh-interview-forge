@@ -54,6 +54,7 @@ const CSS = [
   '.forge-btn.accent{background:#1f9d55;border-color:#1f9d55;color:#fff;font-weight:600}',
   '.forge-empty{color:#8b8b9a;font-size:13px;text-align:center;padding:18px 10px}',
   '.forge-fab{position:fixed;right:22px;bottom:22px;width:56px;height:56px;border-radius:50%;border:none;background:#2f6bff;color:#fff;font-size:22px;cursor:pointer;box-shadow:0 6px 18px rgba(47,107,255,.4);z-index:2000}',
+  '.forge-fab-badge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;border-radius:10px;background:#d93045;color:#fff;font-size:12px;font-weight:700;line-height:20px;padding:0 5px;box-shadow:0 2px 6px rgba(0,0,0,.25);pointer-events:none;font-family:system-ui,sans-serif}',
 ].join('\n')
 
 // ---- 可量化诊断：window.__FORGE_DIAG__ 记录模块执行各步骤（E2E 与现场排查用） ----
@@ -142,7 +143,9 @@ export async function apply(ctx: Context): Promise<void> {
       : null
 
     return h('div', null,
-      h('button', { className: 'forge-fab', onClick: () => setOpen((o) => !o), title: 'InterviewForge 速练' + (entries.length ? '（' + entries.length + ' 场）' : '') }, '⚡' + (entries.length ? String(entries.length) : '')),
+      h('button', { className: 'forge-fab', onClick: () => setOpen((o) => !o), title: 'InterviewForge 速练' + (entries.length ? '（' + entries.length + ' 场）' : '') },
+        '⚡',
+        entries.length > 0 ? h('span', { className: 'forge-fab-badge' }, entries.length > 99 ? '99+' : String(entries.length)) : null),
       panel,
       quizView ? h(QuizRunner, { rpc: forgeRpc, sessionId: quizView.sessionId, onClose: () => { setQuizView(null); refresh() } }) : null,
       reportView ? h(ReportView, { rpc: forgeRpc, sessionId: reportView.sessionId, title: reportView.title, onClose: () => { setReportView(null); refresh() } }) : null)
