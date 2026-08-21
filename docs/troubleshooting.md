@@ -13,6 +13,7 @@
 | 3 | `cannot get property "remote.forge" without inject` | web boot / apply | `c7cfe18` |
 | 4 | `require.resolve('<pkg>/package.json')` 失败并被缓存为负 | modules resolve | `e167768` |
 | 5 | `@Remote` marker 读不到 → forge/* 路由不到（`invocation-unavailable`） | host cross-end | `6afeb0d`（前置约束） |
+| 7 | DSH 升级后 `/api/forge/*` 全部 `HTTP 404`（client 报 transport failure） | host cross-end | 本节 #7（实例对齐失效复发） |
 | 6 | esbuild `Invalid option ... "intro"` | 构建 | 见 #1 / 本文末尾 |
 
 ---
@@ -134,6 +135,45 @@ WeakMap 不共享 → 读不到 marker。host 的 SRC 回退（无生成 `./type
 | esbuild `Invalid option in build() call: "intro"` | `intro` 是 rolldown/tsdown 选项，非 esbuild | 把 `var module = { exports: {} }; var exports = module.exports;` 并入 `banner` |
 | esbuild 对标准装饰器（`@Remote`）产出 | 需浏览器运行 `context.addInitializer` 语义 | esbuild ≥0.21 原生支持标准装饰器，直接构建即可（已验证 `__decoratorContext(... addInitializer ...)`） |
 | client bundle 体积猛增（3.6KB → 536KB） | 描述子用 `zod`，`noExternal` 默认内联 | 属预期，zod 仅 client 端编解码用 |
+
+---
+
+## 7. DSH 升级后 `/api/forge/*` 全部 404 —— #5 的「实例对齐」被升级打断（复发型）
+
+**症状**：client 浮层报 `client api: forge/list failed: transport failure for /api/forge/list: HTTP 404`；
+host 半边无崩溃、三个 forge_* 工具照常可用，唯独跨端路由全部 404。
+
+**根因**：#5 的修复是让 `forge-plugin/node_modules/@deepseek-ai/{dsh-typert-protocol,cordis}`
+symlink 到 host 同一物理实例。DSH 升级（如 0.1.0-rc.7 → 0.1.1-rc.1）后宿主包换了物理位置/版本，
+而插件里的 symlink 还指着旧位置（本次是指向 `~/.npm/_npx/<hash>` 缓存里的 rc.7）→
+`@Remote` marker 写进旧实例的模块私有 WeakMap，新版 api-gateway 从新实例读 → 空 → 不注册路由。
+`dsh-tools` 同理：旧拷贝与宿主 `ToolRuntime` 不同实例，存在漂移风险。
+
+**spike 实证**（`_research/spike-typert-instance-split.mjs`，真实双实例加载）：
+```
+[A] 注册=OLD 读=OLD : ["list","snapshot"]   ← 升级前正常
+[B] 注册=OLD 读=NEW : []                    ← 升级后故障态 = /api/forge/* 全部 404
+[C] 注册=NEW 读=NEW : ["list","snapshot"]   ← 修复目标
+```
+
+**修复**（每次 DSH 升级后必做；改完重启 dsh web 生效）：
+```bash
+HOST_NM=<全局dsh>/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai
+PLUG=<插件>/node_modules/@deepseek-ai
+ln -sfn "$HOST_NM/dsh-typert-protocol" "$PLUG/dsh-typert-protocol"
+ln -sfn "$HOST_NM/cordis"              "$PLUG/cordis"
+rm -rf "$PLUG/dsh-tools" && ln -sfn "$HOST_NM/dsh-tools" "$PLUG/dsh-tools"
+# package.json 里钉死的 @deepseek-ai/* 版本同步改成宿主版本
+```
+
+**验证**：`_research/smoke-forge-activation.mjs` —— 真实解析路径下 `remoteMethods(gateway)` 应列出
+全部 10 个方法、`typertRemote` 为 `{serviceKey:'forge', namespace:'forge'}`、`apply()` 注册三工具。
+重启后端到端探测（⚠️ 端点 **POST-only，GET 返回 404 属预期**；payload 需恰好一个 plain-object args 字段）：
+```bash
+curl -s -X POST -H 'Content-Type: application/json' \
+  -d '{"type":"client-request","rpcId":"probe","method":"forge/list","payload":{"args":{}}}' \
+  http://127.0.0.1:3080/api/forge/list     # 期望 result.ok=true 且 value.entries 含历史条目
+```
 
 ---
 
