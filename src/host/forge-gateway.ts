@@ -146,12 +146,78 @@ async function scanArchive(fs: any, roots: string[], year?: string | null, month
   return [...daysMap.values()].sort((a, b) => a.day - b.day)
 }
 
-export async function diskEntries(ctx: Context): Promise<ReturnType<typeof toListItem>[]> {
-  const fs: any = ctx.get('fs')
-  if (!fs) return []
+/** 收集候选 archive 根目录：进程重启后仍能发现磁盘历史（修复浮层队列为空）。 */
+async function discoverRoots(ctx: Context): Promise<string[]> {
   const roots: string[] = []
   if (store.lastArchiveDir) roots.push(store.lastArchiveDir)
   if (store.lastWorkspace) roots.push(store.lastWorkspace + '/interview-forge-archive')
+  try { if (process.cwd()) roots.push(process.cwd() + '/interview-forge-archive') } catch { /* noop */ }
+  // 插件自身位置锚点：本部署为工作区 link 安装（<workspace>/forge-plugin/lib/），
+  // 从 import.meta.url 反推工作区根，进程 cwd 无关、重启可靠。
+  try {
+    const here = decodeURIComponent(new URL('.', import.meta.url).pathname)
+    const ws = here.replace(/\/lib\/$/, '').replace(/\/forge-plugin$/, '')
+    if (ws && ws !== here) roots.push(ws + '/interview-forge-archive')
+  } catch { /* noop */ }
+  // 从活跃会话头收集 cwd（会话服务可枚举时）
+  try {
+    const sessions: any = (ctx as any).get('sessions')
+    const vals: any[] =
+      sessions && typeof sessions.values === 'function' ? [...sessions.values()] :
+      sessions && typeof sessions[Symbol.iterator] === 'function' ? [...sessions] : []
+    for (const s of vals) {
+      const cwd = s && s.header && s.header.cwd
+      if (cwd) roots.push(String(cwd) + '/interview-forge-archive')
+    }
+  } catch { /* noop */ }
+  return [...new Set(roots.filter(Boolean))] as string[]
+}
+
+/** 按 sessionId 从磁盘懒加载水合一条历史会话进 store（load/answer/finish 等的前置）。 */
+export async function hydrateEntry(ctx: Context, sid: string): Promise<ForgeEntryLike | undefined> {
+  if (!sid) return undefined
+  if (store.sessions.has(sid)) return store.sessions.get(sid)
+  const fs: any = ctx.get('fs')
+  if (!fs) return undefined
+  const m = /^if-(\d{4})(\d{2})(\d{2})-/.exec(sid)
+  if (!m) return undefined
+  const date = m[1] + '-' + m[2] + '-' + m[3]
+  for (const root of await discoverRoots(ctx)) {
+    const dir = root + '/sessions/' + date
+    let quiz: any = null
+    try { quiz = JSON.parse(await fs.readText(await fs.resolve(dir + '/quiz-' + sid + '.json'))) } catch { continue }
+    if (!quiz || !quiz.meta || !Array.isArray(quiz.questions)) continue
+    let result: any = null
+    let reportHtml: string | null = null
+    try { result = JSON.parse(await fs.readText(await fs.resolve(dir + '/result-' + sid + '.json'))) } catch { /* none */ }
+    try { reportHtml = await fs.readText(await fs.resolve(dir + '/report-' + sid + '.html')) } catch { /* none */ }
+    const status = reportHtml ? 'reported' : (result ? 'submitted' : 'answering')
+    const entry: ForgeEntryLike = {
+      sessionId: sid,
+      quiz,
+      archiveDir: root,
+      quizPath: dir + '/quiz-' + sid + '.json',
+      resultPath: dir + '/result-' + sid + '.json',
+      status,
+      startedAt: createdAtFromSid(sid),
+      result,
+      reportHtml,
+      ownerSessionId: '',
+      progress: freshProgress() as ForgeEntryLike['progress'],
+      seeded: !!result,
+    }
+    store.sessions.set(sid, entry)
+    store.order.push(sid)
+    if (!store.lastArchiveDir) store.lastArchiveDir = root
+    return entry
+  }
+  return undefined
+}
+
+export async function diskEntries(ctx: Context): Promise<ReturnType<typeof toListItem>[]> {
+  const fs: any = ctx.get('fs')
+  if (!fs) return []
+  const roots: string[] = await discoverRoots(ctx)
   if (roots.length === 0) return []
   const days = await scanArchive(fs, roots, null, null)
   const out: ReturnType<typeof toListItem>[] = []
@@ -175,6 +241,14 @@ export class ForgeGateway extends TypertRemoteService {
     super(ctx, 'forge')
   }
 
+  /** 内存命中则返回；否则尝试从磁盘水合历史会话。 */
+  private async ensureEntry(sid?: string): Promise<ForgeEntryLike | undefined> {
+    const found = store.findEntry(sid)
+    if (found) return found
+    if (!sid) return undefined
+    return hydrateEntry(this.ctx, sid)
+  }
+
   @Remote('list')
   async list(): Promise<{ entries: ReturnType<typeof toListItem>[] }> {
     const entries: ReturnType<typeof toListItem>[] = []
@@ -190,7 +264,7 @@ export class ForgeGateway extends TypertRemoteService {
 
   @Remote('load')
   async load(args: { sessionId?: string }): Promise<unknown> {
-    const entry = store.findEntry(args.sessionId)
+    const entry = await this.ensureEntry(args.sessionId)
     if (!entry) return null
     return {
       sessionId: entry.sessionId,
@@ -204,7 +278,7 @@ export class ForgeGateway extends TypertRemoteService {
 
   @Remote('snapshot')
   async snapshot(args: { sessionId: string }): Promise<unknown> {
-    const entry = store.findEntry(args.sessionId)
+    const entry = await this.ensureEntry(args.sessionId)
     if (!entry) return null
     const p = entry.progress
     const now = Date.now()
@@ -222,7 +296,7 @@ export class ForgeGateway extends TypertRemoteService {
 
   @Remote('applySeed')
   async applySeed(args: { sessionId: string }): Promise<{ ok: boolean; seeded?: number; reason?: string }> {
-    const entry = store.sessions.get(args.sessionId)
+    const entry = await this.ensureEntry(args.sessionId)
     if (!entry || entry.seeded) return { ok: false, reason: 'no-entry-or-seeded' }
     const fs: any = this.ctx.get('fs')
     if (!fs) return { ok: false, reason: 'no-fs' }
@@ -243,7 +317,7 @@ export class ForgeGateway extends TypertRemoteService {
 
   @Remote('answer')
   async answer(args: { sessionId: string; questionId: string; selected?: string | null; note?: string | null }): Promise<{ ok: boolean }> {
-    const entry = store.findEntry(args.sessionId)
+    const entry = await this.ensureEntry(args.sessionId)
     if (!entry) throw new Error('未知的 sessionId: ' + args.sessionId)
     const p = entry.progress
     const end: number = (p.pausedAt as number) || Date.now()
@@ -261,7 +335,7 @@ export class ForgeGateway extends TypertRemoteService {
 
   @Remote('nav')
   async nav(args: { sessionId: string; index: number }): Promise<{ ok: boolean }> {
-    const entry = store.findEntry(args.sessionId)
+    const entry = await this.ensureEntry(args.sessionId)
     if (!entry) throw new Error('未知的 sessionId: ' + args.sessionId)
     entry.progress.currentIndex = args.index
     if (entry.progress.pausedAt === 0) entry.progress.questionStartTime = Date.now()
@@ -270,7 +344,7 @@ export class ForgeGateway extends TypertRemoteService {
 
   @Remote('pause')
   async pause(args: { sessionId: string }): Promise<{ ok: boolean }> {
-    const entry = store.findEntry(args.sessionId)
+    const entry = await this.ensureEntry(args.sessionId)
     if (!entry) throw new Error('未知的 sessionId: ' + args.sessionId)
     const p = entry.progress
     if (p.started && p.pausedAt === 0) p.pausedAt = Date.now()
@@ -279,7 +353,7 @@ export class ForgeGateway extends TypertRemoteService {
 
   @Remote('resume')
   async resume(args: { sessionId: string }): Promise<{ ok: boolean }> {
-    const entry = store.findEntry(args.sessionId)
+    const entry = await this.ensureEntry(args.sessionId)
     if (!entry) throw new Error('未知的 sessionId: ' + args.sessionId)
     const p = entry.progress
     const now = Date.now()
@@ -298,7 +372,7 @@ export class ForgeGateway extends TypertRemoteService {
   @Remote('finish')
   async finish(args: { sessionId: string }): Promise<{ ok: boolean }> {
     if (!args || !args.sessionId) throw new Error('forge.finish 需要 sessionId')
-    const entry = store.sessions.get(args.sessionId)
+    const entry = await this.ensureEntry(args.sessionId)
     if (!entry) throw new Error('未知的 sessionId: ' + args.sessionId)
     const fs: any = this.ctx.get('fs')
     if (!fs) throw new Error('fs 服务不可用，无法写入答题结果')
@@ -322,18 +396,17 @@ export class ForgeGateway extends TypertRemoteService {
 
   @Remote('report')
   async report(args: { sessionId: string }): Promise<{ reportHtml: string | null }> {
-    const entry = store.findEntry(args.sessionId)
+    const entry = await this.ensureEntry(args.sessionId)
     if (entry && entry.reportHtml) return { reportHtml: entry.reportHtml }
     const fs: any = this.ctx.get('fs')
-    const archiveRoot: string | null = store.lastArchiveDir || (store.lastWorkspace ? store.lastWorkspace + '/interview-forge-archive' : null)
-    if (fs && args.sessionId && archiveRoot) {
-      const m = /^if-(\d{4})(\d{2})(\d{2})-/.exec(args.sessionId)
-      if (m) {
+    const m = /^if-(\d{4})(\d{2})(\d{2})-/.exec(args.sessionId || '')
+    if (fs && m) {
+      for (const root of await discoverRoots(this.ctx)) {
         try {
-          const p = archiveRoot + '/sessions/' + m[1] + '-' + m[2] + '-' + m[3] + '/report-' + args.sessionId + '.html'
+          const p = root + '/sessions/' + m[1] + '-' + m[2] + '-' + m[3] + '/report-' + args.sessionId + '.html'
           const html = await fs.readText(await fs.resolve(p))
           return { reportHtml: html }
-        } catch { /* fall through */ }
+        } catch { /* try next root */ }
       }
     }
     return { reportHtml: null }

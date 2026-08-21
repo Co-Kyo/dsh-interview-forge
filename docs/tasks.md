@@ -58,3 +58,16 @@
 ## 待办（下一棒）
 - [ ] ForgeGateway 方法接入 store（list 返回真实 entries；snapshot/load/answer/finish/report/history 操作 store/磁盘）
 - [ ] 浮层 UI 补全：会话详情/答题视图（读题→提交 answer→完成 finish→报告 report）
+## 🐛 修复：重启后浮层队列为空（2026-08-21）
+- **症状**：dsh 重启后右下角 ⚡ 浮层面板空（list 返回 entries:[]），历史会话全部消失。
+- **根因**：`diskEntries()` 的扫描根只来自 `store.lastArchiveDir/lastWorkspace`，两者仅在本进程内跑过
+  `forge_start` 才有值 → 重启后 roots 为空直接返回 []；且 `load/snapshot/answer/finish` 只查内存，
+  磁盘历史条目即使列出也无法打开。
+- **修复**（`src/host/forge-gateway.ts`，工具契约零变更）：
+  - `discoverRoots()`：多锚点收集候选根（store 字段 + 进程 cwd + **插件 import.meta.url 反推工作区** + 会话头 cwd 枚举）；
+  - `hydrateEntry(sid)`（导出）：按 sid 内嵌日期定位 `sessions/{date}/quiz-{sid}.json`，重建完整条目
+    （含 result/reportHtml/status），回填 `store.lastArchiveDir`；
+  - `ensureEntry()`：load/snapshot/applySeed/answer/nav/pause/resume/finish/report 全部改走
+    「内存命中 → 磁盘水合」；report 改为多根遍历。
+- **验证**：`scripts/smoke-disk-recovery.mjs`（模拟重启后干净 store）→ 19 条历史全部发现；
+  未完成场水合 status=answering；已报告场 reportHtml 16911 字符。生效需重启 dsh web。
