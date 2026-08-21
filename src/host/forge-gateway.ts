@@ -267,6 +267,54 @@ export class ForgeGateway extends TypertRemoteService {
     return { entries }
   }
 
+  /** 历史 dashboard 数据：按日分桶的全部练习。磁盘档案为主（scanArchive 推导状态/正确率/耗时），
+   *  内存未落盘条目兜底合并；按日期降序，供月历视图本地翻月渲染。 */
+  @Remote('history')
+  async history(): Promise<{
+    days: Array<{
+      year: number; month: number; day: number
+      entries: Array<{ sessionId: string; title: string; totalQuestions: number; status: string; correctCount: number; accuracy: number | null; durationMs: number | null }>
+    }>
+  }> {
+    type HistEntry = { sessionId: string; title: string; totalQuestions: number; status: string; correctCount: number; accuracy: number | null; durationMs: number | null }
+    type Bucket = { year: number; month: number; day: number; entries: HistEntry[] }
+    const days = new Map<string, Bucket>()
+    const bucketFor = (year: number, month: number, day: number): Bucket => {
+      const key = `${year}-${pad(month)}-${pad(day)}`
+      let b = days.get(key)
+      if (!b) { b = { year, month, day, entries: [] }; days.set(key, b) }
+      return b
+    }
+    const seen = new Set<string>()
+    // 磁盘档案：scanArchive 已推导 correctCount / accuracy / durationMs / status
+    const fs = this.ctx.get('fs')
+    if (fs) {
+      for (const bucket of await scanArchive(fs, await discoverRoots(this.ctx), null, null)) {
+        const b = bucketFor(Number(bucket.year), Number(bucket.month), Number(bucket.day))
+        for (const en of bucket.entries as HistEntry[]) {
+          if (!en || seen.has(String(en.sessionId))) continue
+          seen.add(String(en.sessionId))
+          b.entries.push(en)
+        }
+      }
+    }
+    // 内存条目兜底（尚未落盘或根目录不可达的会话）
+    for (let i = store.order.length - 1; i >= 0; i--) {
+      const e = store.sessions.get(store.order[i])
+      if (!e || seen.has(e.sessionId)) continue
+      seen.add(e.sessionId)
+      const questions = e.quiz.questions as Array<{ id: string; type?: string; answer?: string | null }>
+      let correct = 0
+      for (const q of questions) {
+        const a = (e.progress?.answers || {})[q.id] as { selected?: string | null } | undefined
+        if (a && q.type === 'choice' && a.selected != null && q.answer != null && String(a.selected) === String(q.answer)) correct++
+      }
+      const b = bucketFor(new Date(e.startedAt || createdAtFromSid(e.sessionId) || Date.now()).getFullYear(), new Date(e.startedAt || createdAtFromSid(e.sessionId) || Date.now()).getMonth() + 1, new Date(e.startedAt || createdAtFromSid(e.sessionId) || Date.now()).getDate())
+      b.entries.push({ sessionId: e.sessionId, title: e.quiz.meta.title, totalQuestions: questions.length, status: e.status, correctCount: correct, accuracy: questions.length ? Math.round(correct / questions.length * 100) : null, durationMs: null })
+    }
+    return { days: [...days.values()].sort((a, b) => ((b.year - a.year) || (b.month - a.month) || (b.day - a.day))) }
+  }
+
   @Remote('load')
   async load(args: { sessionId?: string }): Promise<unknown> {
     const entry = await this.ensureEntry(args.sessionId)

@@ -29,6 +29,34 @@ export const ForgeRemoteContribution = {
       },
     },
     {
+      id: 'interview-forge-plugin#forge/history',
+      service: 'forge',
+      namespace: 'forge',
+      method: 'history',
+      invocation: { kind: 'direct' },
+      parameters: [],
+      result: {
+        mode: 'strict',
+        typeSymbol: 'interview-forge-plugin#forge/history:result',
+        schema: z.object({
+          days: z.array(z.object({
+            year: z.number(),
+            month: z.number(),
+            day: z.number(),
+            entries: z.array(z.object({
+              sessionId: z.string(),
+              title: z.string(),
+              totalQuestions: z.number(),
+              status: z.string(),
+              correctCount: z.number().nullable().optional(),
+              accuracy: z.number().nullable().optional(),
+              durationMs: z.number().nullable().optional(),
+            })),
+          })),
+        }),
+      },
+    },
+    {
       id: 'interview-forge-plugin#forge/snapshot',
       service: 'forge',
       namespace: 'forge',

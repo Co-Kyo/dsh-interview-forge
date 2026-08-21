@@ -11,8 +11,9 @@
 
 ### host 半边（本已达到）
 工具：`ctx.tools.register(defineTool)` × 3（`forge_start`/`forge_report_ready`/`forge_result`），随启动常驻、全局注册表已证。
-待加：`ForgeGateway extends TypertRemoteService` 承载实时方法：
-`list / snapshot / load / applySeed / answer / nav / pause / resume / finish / report / history`。
+已就绪（2026-08-21 实现，含历史 dashboard 的 `history` 按日分桶查询）：
+`ForgeGateway extends TypertRemoteService` 承载实时方法：
+`list / history / snapshot / load / applySeed / answer / nav / pause / resume / finish / report`。
 
 ### client 半边（bundle 携带浏览器 UI 的官方机制）
 - 官方 browser roster：`packages/bundle/web-app/cordis.patch.yml` 里 `dsh.client` 行（如 `ui-theme`、`ui-conversation`）→ 被 `dsh-client-modules` 扫描进 `window.__DSH_BOOT__`，经 `/plugins/<id>/client.js` 提供浏览器产物。

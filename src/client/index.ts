@@ -9,6 +9,7 @@ export const inject = ['slots', 'remote']
 
 type ForgeRpc = {
   list(): Promise<{ entries: ForgeEntry[] }>
+  history(): Promise<{ days: HistoryDay[] }>
   load(args: { sessionId: string }): Promise<{ sessionId: string; quiz: { meta: { title: string }; questions: Q[] }; status: string; progress: { currentIndex: number; answers: Record<string, unknown> } } | null>
   snapshot(args: { sessionId: string }): Promise<{ status: string; started: boolean; currentIndex: number; answers: Record<string, unknown>; elapsedGlobal: number; elapsedQuestion: number } | null>
   applySeed(args: { sessionId: string }): Promise<{ ok: boolean }>
@@ -20,6 +21,8 @@ type ForgeRpc = {
   report(args: { sessionId: string }): Promise<{ reportHtml: string | null }>
 }
 interface ForgeEntry { sessionId: string; title: string; totalQuestions: number; status: string }
+interface HistoryEntry { sessionId: string; title: string; totalQuestions: number; status: string; correctCount?: number | null; accuracy?: number | null; durationMs?: number | null }
+interface HistoryDay { year: number; month: number; day: number; entries: HistoryEntry[] }
 interface Q { id: string; type: string; stem: string; options?: { key: string; text: string }[]; answer?: string; explanation?: string }
 
 function h(type: unknown, props: unknown | null, ...children: React.ReactNode[]): React.ReactElement {
@@ -27,7 +30,7 @@ function h(type: unknown, props: unknown | null, ...children: React.ReactNode[])
 }
 
 const CSS = [
-  '.forge-panel{position:fixed;right:22px;bottom:88px;width:330px;max-height:62vh;background:#fff;border:1px solid #d9dae2;border-radius:12px;box-shadow:0 10px 34px rgba(0,0,0,.12);z-index:2000;display:flex;flex-direction:column;overflow:hidden}',
+  '.forge-panel{position:fixed;right:22px;bottom:88px;width:330px;max-height:62vh;background:#fff;border:1px solid #d9dae2;border-radius:12px;box-shadow:0 10px 34px rgba(0,0,0,.12);z-index:1290;display:flex;flex-direction:column;overflow:hidden}',
   '.forge-panel-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid #eee;font-weight:600;font-size:14px}',
   '.forge-list{overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:8px}',
   '.forge-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f2f3f7;border:1px solid #e8e9ef;border-radius:10px;cursor:pointer}',
@@ -36,7 +39,7 @@ const CSS = [
   '.forge-item .s{font-size:11px;color:#8b8b9a;margin-top:2px}',
   '.forge-badge{font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;flex-shrink:0}',
   '.b-answering{background:#2f6bff22;color:#2f6bff}.b-reported{background:#1f9d5522;color:#1f9d55}.b-done{background:#d99a0022;color:#d99a00}',
-  '.forge-modal{position:fixed;inset:0;background:rgba(0,0,0,.48);z-index:2100;display:flex;align-items:center;justify-content:center}',
+  '.forge-modal{position:fixed;inset:0;background:rgba(0,0,0,.48);z-index:1400;display:flex;align-items:center;justify-content:center}',
   '.forge-card{width:min(760px,94vw);height:min(88vh,900px);background:#fff;border-radius:16px;display:flex;flex-direction:column;overflow:hidden}',
   '.forge-card-head{display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-bottom:1px solid #eee;font-size:13px;color:#565664;flex-shrink:0}',
   '.forge-body{flex:1;overflow:auto;padding:20px 24px}',
@@ -53,8 +56,30 @@ const CSS = [
   '.forge-btn.primary{background:#2f6bff;border-color:#2f6bff;color:#fff;font-weight:600}',
   '.forge-btn.accent{background:#1f9d55;border-color:#1f9d55;color:#fff;font-weight:600}',
   '.forge-empty{color:#8b8b9a;font-size:13px;text-align:center;padding:18px 10px}',
-  '.forge-fab{position:fixed;right:22px;bottom:22px;width:56px;height:56px;border-radius:50%;border:none;background:#2f6bff;color:#fff;font-size:22px;cursor:pointer;box-shadow:0 6px 18px rgba(47,107,255,.4);z-index:2000}',
-  '.forge-fab-badge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;border-radius:10px;background:#d93045;color:#fff;font-size:12px;font-weight:700;line-height:20px;padding:0 5px;box-shadow:0 2px 6px rgba(0,0,0,.25);pointer-events:none;font-family:system-ui,sans-serif}',
+  '.forge-fab{position:fixed;right:22px;bottom:22px;width:56px;height:56px;border-radius:50%;border:none;background:var(--dsw-alias-brand-primary-new-colorprimary-new-color,#2f6bff);color:#fff;font-size:22px;cursor:pointer;box-shadow:0 6px 20px color-mix(in srgb,var(--dsw-alias-brand-primary-new-colorprimary-new-color,#2f6bff) 45%,transparent);z-index:1300;display:flex;align-items:center;justify-content:center;pointer-events:auto;transition:transform .15s}',
+  '.forge-fab:hover{transform:scale(1.06)}',
+  '.forge-fab-badge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;border-radius:10px;background:var(--dsw-alias-state-error-primary,#d93045);color:var(--dsw-alias-bg-base,#fff);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 5px;border:2px solid var(--dsw-alias-bg-base,#fff)}',
+  // ---- 历史 dashboard（月历 + 当日列表） ----
+  '.forge-hist-card{width:min(560px,94vw);height:auto;max-height:min(86vh,860px)}',
+  '.forge-cal-nav{display:flex;align-items:center;gap:10px;margin-bottom:10px}',
+  '.forge-cal-title{flex:1;text-align:center;font-weight:600;font-size:14px}',
+  '.forge-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}',
+  '.forge-cal-dow{font-size:11px;color:#8b8b9a;text-align:center;padding:2px 0 6px;font-weight:600}',
+  '.forge-cal-cell{position:relative;height:46px;background:#f2f3f7;border:1px solid #e8e9ef;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#565664;cursor:pointer}',
+  '.forge-cal-cell:hover{border-color:#b9bac8}',
+  '.forge-cal-cell.empty{background:transparent;border:none;cursor:default}',
+  '.forge-cal-cell.has{background:#2f6bff0d;border-color:#b9cffd;color:#2f6bff;font-weight:700}',
+  '.forge-cal-cell.sel{border-color:#2f6bff;background:#2f6bff1a;box-shadow:0 0 0 1px #2f6bff66}',
+  '.forge-cal-cell.today::after{content:"";position:absolute;bottom:4px;left:50%;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:#1f9d55}',
+  '.forge-cal-count{position:absolute;top:3px;right:5px;font-size:10px;line-height:1.2;font-weight:700;color:#2f6bff}',
+  '.forge-sum{display:flex;gap:16px;flex-wrap:wrap;padding:9px 12px;background:#f6f7fb;border:1px solid #e8e9ef;border-radius:10px;font-size:12px;color:#565664;margin-top:12px}',
+  '.forge-sum b{color:#2f6bff;font-weight:700}',
+  '.forge-hist-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}',
+  '.forge-hist-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f2f3f7;border:1px solid #e8e9ef;border-radius:10px;cursor:pointer}',
+  '.forge-hist-item:hover{border-color:#b9bac8}',
+  '.forge-hist-info{flex:1;min-width:0}',
+  '.forge-hist-title{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+  '.forge-hist-sub{font-size:11px;color:#8b8b9a;margin-top:2px}',
 ].join('\n')
 
 // ---- 可量化诊断：window.__FORGE_DIAG__ 记录模块执行各步骤（E2E 与现场排查用） ----
@@ -116,6 +141,7 @@ export async function apply(ctx: Context): Promise<void> {
     const [err, setErr] = React.useState('')
     const [quizView, setQuizView] = React.useState<{ sessionId: string } | null>(null)
     const [reportView, setReportView] = React.useState<{ sessionId: string; title: string } | null>(null)
+    const [histOpen, setHistOpen] = React.useState(false)
     const refresh = () => { forgeRpc.list().then((d) => { setErr(''); const n = (d && d.entries) || []; setEntries(n); dstep('list:ok', 'entries=' + n.length + ' raw=' + (d ? JSON.stringify(d).slice(0, 140) : 'RESOLVED_NULL')) }).catch((e) => { const m = String(e && e.message || e); setErr(m); dstep('list:err', m) }) }
     React.useEffect(() => { refresh(); const iv = window.setInterval(refresh, 3000); return () => window.clearInterval(iv) }, [])
 
@@ -123,7 +149,9 @@ export async function apply(ctx: Context): Promise<void> {
       ? h('div', { className: 'forge-panel' },
           h('div', { className: 'forge-panel-head' },
             h('span', null, '⚡ InterviewForge 速练'),
-            h('button', { className: 'forge-btn', onClick: () => setOpen(false), style: { padding: '2px 8px' } }, '收起')),
+            h('div', { style: { display: 'flex', gap: 6 } },
+              h('button', { className: 'forge-btn', onClick: () => { setOpen(false); setHistOpen(true) }, style: { padding: '2px 8px' }, title: '按日期查看练习历史' }, '📅 历史'),
+              h('button', { className: 'forge-btn', onClick: () => setOpen(false), style: { padding: '2px 8px' } }, '收起'))),
           h('div', { className: 'forge-list' },
             err
               ? h('div', { style: { color: '#d93045', fontSize: 12, whiteSpace: 'pre-wrap', padding: '6px 2px' } }, 'LIST 错误: ' + err)
@@ -142,11 +170,22 @@ export async function apply(ctx: Context): Promise<void> {
                 })))
       : null
 
+    // 对齐动态插件 v29：角标只计「作答中」场次；图标为试卷 SVG
+    const activeCount = entries.filter((e) => e.status === 'answering').length
     return h('div', null,
-      h('button', { className: 'forge-fab', onClick: () => setOpen((o) => !o), title: 'InterviewForge 速练' + (entries.length ? '（' + entries.length + ' 场）' : '') },
-        '⚡',
-        entries.length > 0 ? h('span', { className: 'forge-fab-badge' }, entries.length > 99 ? '99+' : String(entries.length)) : null),
+      h('button', { className: 'forge-fab', onClick: () => setOpen((o) => !o), title: 'InterviewForge 速练' },
+        h('svg', { viewBox: '0 0 24 24', width: 26, height: 26, fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
+          h('path', { d: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' }),
+          h('path', { d: 'M14 2v6h6' }),
+          h('path', { d: 'm9 15 2 2 4-4' })),
+        activeCount > 0 ? h('span', { className: 'forge-fab-badge' }, activeCount > 99 ? '99+' : String(activeCount)) : null),
       panel,
+      histOpen ? h(HistoryDashboard, {
+        rpc: forgeRpc,
+        onClose: () => setHistOpen(false),
+        onOpenReport: (sessionId: string, title: string) => { setHistOpen(false); setReportView({ sessionId, title }) },
+        onOpenQuiz: (sessionId: string) => { setHistOpen(false); setQuizView({ sessionId }) },
+      }) : null,
       quizView ? h(QuizRunner, { rpc: forgeRpc, sessionId: quizView.sessionId, onClose: () => { setQuizView(null); refresh() } }) : null,
       reportView ? h(ReportView, { rpc: forgeRpc, sessionId: reportView.sessionId, title: reportView.title, onClose: () => { setReportView(null); refresh() } }) : null)
   }
@@ -214,6 +253,121 @@ export async function apply(ctx: Context): Promise<void> {
         html
           ? h('iframe', { style: { flex: 1, border: 'none', width: '100%', height: '100%' }, srcDoc: html, sandbox: 'allow-scripts' })
           : h('div', { className: 'forge-empty' }, '报告尚未生成或读取失败')))
+  }
+
+  // ---- 历史 dashboard：月历按日期浏览全部练习（对齐动态组件 v29 的「📅 练习历史」并增强） ----
+  function fmtDuration(ms: number | null | undefined): string {
+    if (ms == null || !(ms > 0)) return ''
+    const s = Math.floor(ms / 1000)
+    if (s < 60) return s + ' 秒'
+    const m = Math.floor(s / 60)
+    if (m < 60) return m + ' 分 ' + (s % 60) + ' 秒'
+    return Math.floor(m / 60) + ' 小时 ' + (m % 60) + ' 分'
+  }
+  function statusBadge(status: string): { cls: string; label: string } {
+    if (status === 'reported') return { cls: 'b-reported', label: '报告就绪' }
+    if (status === 'submitted') return { cls: 'b-done', label: '已完成' }
+    return { cls: 'b-answering', label: '进行中' }
+  }
+
+  function HistoryDashboard(props: { rpc: ForgeRpc; onClose: () => void; onOpenReport: (sessionId: string, title: string) => void; onOpenQuiz: (sessionId: string) => void }): React.ReactElement {
+    const today = new Date()
+    const [ym, setYm] = React.useState({ year: today.getFullYear(), month: today.getMonth() + 1 })
+    const [days, setDays] = React.useState<HistoryDay[] | null>(null)
+    const [loadErr, setLoadErr] = React.useState('')
+    const [sel, setSel] = React.useState<number | null>(null)
+    const loadHist = React.useCallback(() => {
+      setLoadErr(''); setDays(null)
+      // 首选 history RPC；宿主较旧（无该端点）时降级为 list() 本地分桶（无正确率/耗时）。
+      props.rpc.history()
+        .then((d) => setDays((d && d.days) || []))
+        .catch(() => props.rpc.list().then((d) => {
+          const byKey = new Map<string, HistoryDay>()
+          for (const e of (d && d.entries) || []) {
+            const c = e as unknown as { createdAt?: number }
+            const dt = c.createdAt ? new Date(c.createdAt) : null
+            if (!dt || isNaN(dt.getTime())) continue
+            const key = dt.getFullYear() + '-' + dt.getMonth() + '-' + dt.getDate()
+            let b = byKey.get(key)
+            if (!b) { b = { year: dt.getFullYear(), month: dt.getMonth() + 1, day: dt.getDate(), entries: [] }; byKey.set(key, b) }
+            b.entries.push(e)
+          }
+          setDays([...byKey.values()])
+        }).catch((e2) => { setLoadErr(String(e2 && e2.message || e2)); setDays([]) }))
+    }, [props.rpc]) // eslint-disable-line react-hooks/exhaustive-deps
+    React.useEffect(() => { loadHist() }, [loadHist])
+
+    const dayMap: Record<number, HistoryDay> = {}
+    for (const b of days || []) {
+      if (b.year === ym.year && b.month === ym.month) dayMap[b.day] = b
+    }
+    const monthEntries = Object.values(dayMap).flatMap((b) => b.entries)
+    const accs = monthEntries.map((e) => e.accuracy).filter((a): a is number => a != null)
+    const avgAcc = accs.length ? Math.round(accs.reduce((x, y) => x + y, 0) / accs.length) : null
+    const lead = new Date(ym.year, ym.month - 1, 1).getDay()
+    const total = new Date(ym.year, ym.month, 0).getDate()
+    const cells: Array<number | null> = [...Array<null>(lead).fill(null), ...Array.from({ length: total }, (_, i) => i + 1)]
+    const isToday = (d: number) => d === today.getDate() && ym.year === today.getFullYear() && ym.month === today.getMonth() + 1
+    const shiftMonth = (delta: number) => {
+      setSel(null)
+      setYm(({ year, month }) => {
+        const d = new Date(year, month - 1 + delta, 1)
+        return { year: d.getFullYear(), month: d.getMonth() + 1 }
+      })
+    }
+    const selDay = sel != null ? dayMap[sel] : undefined
+
+    return h('div', { className: 'forge-modal', onClick: (e: { target: unknown; currentTarget: unknown }) => { if (e.target === e.currentTarget) props.onClose() } },
+      h('div', { className: 'forge-card forge-hist-card' },
+        h('div', { className: 'forge-card-head' },
+          h('span', null, '📅 练习历史'),
+          h('div', { style: { display: 'flex', gap: 6 } },
+            h('button', { className: 'forge-btn', onClick: loadHist, style: { padding: '2px 8px' }, title: '重新加载' }, '↻ 刷新'),
+            h('button', { className: 'forge-btn', onClick: props.onClose, style: { padding: '2px 8px' } }, '✕ 关闭'))),
+        h('div', { className: 'forge-body' },
+          h('div', { className: 'forge-cal-nav' },
+            h('button', { className: 'forge-btn', onClick: () => shiftMonth(-1), style: { padding: '2px 12px' } }, '‹'),
+            h('span', { className: 'forge-cal-title' }, ym.year + ' 年 ' + ym.month + ' 月'),
+            h('button', { className: 'forge-btn', onClick: () => setYm({ year: today.getFullYear(), month: today.getMonth() + 1 }), style: { padding: '2px 10px' }, title: '回到本月' }, '今天'),
+            h('button', { className: 'forge-btn', onClick: () => shiftMonth(1), style: { padding: '2px 12px' } }, '›')),
+          h('div', { className: 'forge-cal-grid' },
+            ['日', '一', '二', '三', '四', '五', '六'].map((w) => h('div', { key: 'w' + w, className: 'forge-cal-dow' }, w)),
+            cells.map((d, i) => {
+              if (d == null) return h('div', { key: 'e' + i, className: 'forge-cal-cell empty' })
+              const bucket = dayMap[d]
+              const cls = 'forge-cal-cell' + (bucket ? ' has' : '') + (sel === d ? ' sel' : '') + (isToday(d) ? ' today' : '')
+              return h('div', { key: d, className: cls, title: bucket ? bucket.entries.map((e) => e.title).join('\n') : undefined, onClick: () => setSel(sel === d ? null : d) },
+                String(d),
+                bucket ? h('span', { className: 'forge-cal-count' }, String(bucket.entries.length)) : null)
+            })),
+          h('div', { className: 'forge-sum' },
+            h('span', null, '本月 ', h('b', null, String(monthEntries.length)), ' 场'),
+            h('span', null, '共 ' + monthEntries.reduce((n, e) => n + (e.totalQuestions || 0), 0) + ' 题'),
+            avgAcc != null ? h('span', null, '平均正确率 ' + avgAcc + '%') : null,
+            h('span', null, '报告就绪 ' + monthEntries.filter((e) => e.status === 'reported').length + ' 场')),
+          loadErr !== ''
+            ? h('div', { style: { color: '#d93045', fontSize: 12, whiteSpace: 'pre-wrap', marginTop: 10 } }, 'HISTORY 错误: ' + loadErr)
+            : null,
+          days === null
+            ? h('div', { className: 'forge-empty' }, '加载中…')
+            : selDay
+              ? h('div', { className: 'forge-hist-list' },
+                  selDay.entries.map((en) => {
+                    const badge = statusBadge(en.status)
+                    const parts = [en.sessionId, en.totalQuestions + ' 题']
+                    if (en.accuracy != null) parts.push('正确率 ' + en.accuracy + '%')
+                    const dur = fmtDuration(en.durationMs)
+                    if (dur) parts.push(dur)
+                    return h('div', { key: en.sessionId, className: 'forge-hist-item', onClick: () => {
+                      if (en.status === 'answering') props.onOpenQuiz(en.sessionId)
+                      else props.onOpenReport(en.sessionId, en.title)
+                    } },
+                      h('div', { className: 'forge-hist-info' },
+                        h('div', { className: 'forge-hist-title' }, en.title),
+                        h('div', { className: 'forge-hist-sub' }, parts.join(' · '))),
+                      h('span', { className: 'forge-badge ' + badge.cls }, badge.label))
+                  }))
+              : h('div', { className: 'forge-empty' }, days.length === 0 ? '还没有练习记录。对 Agent 说「开始练习」即可。' : '点击有数字的日期查看当日练习详情'))))
   }
 
   slots.inject('shell.overlay', () =>
