@@ -49,6 +49,17 @@ const CSS = [
   '.forge-type{display:inline-block;padding:2px 10px;border-radius:4px;font-size:12px;font-weight:700;margin-bottom:12px}',
   '.forge-t-choice{background:var(--dsw-alias-state-warn-primary,#d99a00);color:#fff}.forge-t-open{background:var(--dsw-alias-state-success-primary,#1f9d55);color:#fff}',
   '.forge-stem{font-size:16px;font-weight:600;line-height:1.7;white-space:pre-wrap}',
+  // ---- markdown 富文本（对齐 v29 forge-md-*，色板走 DSW 主题令牌） ----
+  '.forge-stem p,.forge-opt span:last-child p{margin:0 0 10px}',
+  '.forge-stem > :last-child{margin-bottom:0}',
+  '.forge-md-code{font-family:SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:.88em;font-weight:500;background:var(--dsw-alias-bg-module-platform,#f2f3f7);color:var(--dsw-alias-label-primary,#1c1c22);padding:2px 6px;border-radius:4px}',
+  '.forge-md-pre{background:var(--dsw-alias-bg-module-platform,#f2f3f7);border:1px solid var(--dsw-alias-border-l2,#e8e9ef);border-radius:8px;padding:14px;overflow-x:auto;margin:12px 0;text-align:left}',
+  '.forge-md-pre code{display:block;background:none;color:var(--dsw-alias-label-primary,#1c1c22);font-family:SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:.85rem;line-height:1.6;white-space:pre-wrap;word-break:break-word}',
+  '.forge-md-list{padding-left:20px;margin:10px 0}',
+  '.forge-md-list li{margin-bottom:4px}',
+  '.forge-md-table{border-collapse:collapse;margin:12px 0;font-size:.9rem;width:100%}',
+  '.forge-md-table th,.forge-md-table td{border:1px solid var(--dsw-alias-border-l2,#e8e9ef);padding:8px 10px;text-align:left}',
+  '.forge-md-table th{background:var(--dsw-alias-bg-module-platform,#f2f3f7);font-weight:600}',
   '.forge-opt{display:flex;gap:12px;padding:12px 14px;background:var(--dsw-specific-input-major,var(--dsw-alias-bg-base,#fff));border:2px solid var(--dsw-alias-border-l2,#d9dae2);border-radius:10px;cursor:pointer;margin-top:8px}',
   '.forge-opt.sel{border-color:var(--dsw-alias-brand-primary-new-colorprimary-new-color,#2f6bff);background:#2f6bff14}',
   '.forge-opt .k{width:24px;height:24px;border-radius:50%;background:var(--dsw-alias-bg-module-platform,#e8e9ef);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0}',
@@ -103,6 +114,110 @@ function dstep(name: string, extra?: string): void {
   DIAG.steps.push({ t: Date.now() - DIAG.start, name, extra })
   if (DIAG.steps.length > 80) DIAG.steps.splice(0, DIAG.steps.length - 80)
   try { (window as unknown as { __FORGE_DIAG__: unknown }).__FORGE_DIAG__ = DIAG; console.info('[forge-diag]', name, extra ?? '') } catch { /* noop */ }
+}
+
+// ---- Markdown 渲染（对齐 v29 renderMd）：围栏代码块 / 行内代码·粗体·斜体 /
+//      表格（含 :-- 对齐）/ 有序无序列表 / 段落与换行。输出 React 元素，无 innerHTML。 ----
+function pushText(nodes: React.ReactNode[], text: string): void {
+  const parts = String(text).split('\n')
+  for (let i = 0; i < parts.length; i++) {
+    if (i > 0) nodes.push(h('br', null))
+    if (parts[i]) nodes.push(parts[i])
+  }
+}
+
+function inlineMd(text: string): React.ReactNode[] {
+  const nodes: React.ReactNode[] = []
+  const re = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*)/g
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = re.exec(String(text))) !== null) {
+    if (m.index > last) pushText(nodes, String(text).slice(last, m.index))
+    if (m[1] !== undefined) nodes.push(h('code', { key: nodes.length, className: 'forge-md-code' }, m[1].slice(1, -1)))
+    else if (m[2] !== undefined) nodes.push(h('strong', { key: nodes.length }, m[2].slice(2, -2)))
+    else nodes.push(h('em', { key: nodes.length }, m[3].slice(1, -1)))
+    last = m.index + m[0].length
+  }
+  if (last < String(text).length) pushText(nodes, String(text).slice(last))
+  return nodes
+}
+
+function splitRow(row: string): string[] {
+  return String(row).trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((s) => s.trim())
+}
+
+function renderMd(text: unknown): React.ReactNode[] {
+  if (!text) return []
+  const out: React.ReactNode[] = []
+  const src = String(text)
+  const fenceRe = /```[^\n]*\n[\s\S]*?```/g
+  const parts: Array<{ text?: string; fence?: string }> = []
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = fenceRe.exec(src)) !== null) {
+    if (m.index > last) parts.push({ text: src.slice(last, m.index) })
+    parts.push({ fence: m[0] })
+    last = m.index + m[0].length
+  }
+  if (last < src.length) parts.push({ text: src.slice(last) })
+
+  for (let p = 0; p < parts.length; p++) {
+    const part = parts[p]
+    if (part.fence) {
+      const body = part.fence.replace(/^```[^\n]*\n/, '').replace(/```$/, '')
+      out.push(h('pre', { key: 'f' + p, className: 'forge-md-pre' }, h('code', null, body)))
+      continue
+    }
+    const lines = (part.text || '').split('\n')
+    let i = 0
+    while (i < lines.length) {
+      const trimmed = lines[i].trim()
+      if (!trimmed) { i++; continue }
+      // 表格：当前行含 | 且下一行是分隔行（--- | :--: 等）
+      if (trimmed.indexOf('|') >= 0 && i + 1 < lines.length && /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[i + 1].trim()) && (lines[i + 1].match(/\|/g) || []).length > 0) {
+        const rows: string[] = []
+        while (i < lines.length && lines[i].trim().indexOf('|') >= 0) { rows.push(lines[i].trim()); i++ }
+        if (rows.length >= 2) {
+          const headers = splitRow(rows[0])
+          const aligns = splitRow(rows[1]).map((c) => {
+            const t = c.trim()
+            if (t.indexOf(':') === 0 && t.slice(-1) === ':') return 'center'
+            if (t.slice(-1) === ':') return 'right'
+            if (t.indexOf(':') === 0) return 'left'
+            return null
+          })
+          const bodyRows = rows.slice(2)
+          const thead = h('thead', { key: 'th' }, h('tr', null, headers.map((c, idx) =>
+            h('th', { key: idx, style: aligns[idx] ? { textAlign: aligns[idx] } : null }, inlineMd(c)))))
+          const tbody = h('tbody', { key: 'tb' }, bodyRows.map((r, ri) => {
+            const cells = splitRow(r)
+            return h('tr', { key: ri }, cells.map((c, ci) =>
+              h('td', { key: ci, style: aligns[ci] ? { textAlign: aligns[ci] } : null }, inlineMd(c))))
+          }))
+          out.push(h('table', { key: 't' + p, className: 'forge-md-table' }, thead, tbody))
+        }
+        continue
+      }
+      // 列表：- * + 或 1.
+      if (/^(\s*[-*+]\s|\s*\d+\.\s)/.test(trimmed)) {
+        const ordered = /^\s*\d+\.\s/.test(trimmed)
+        const items: string[] = []
+        while (i < lines.length) {
+          const t = lines[i].trim()
+          if (!/^[-*+]\s/.test(t) && !/^\d+\.\s/.test(t)) break
+          items.push(t.replace(/^[-*+]\s/, '').replace(/^\d+\.\s/, ''))
+          i++
+        }
+        out.push(h(ordered ? 'ol' : 'ul', { key: 'l' + p, className: 'forge-md-list' }, items.map((it, idx) =>
+          h('li', { key: idx }, inlineMd(it)))))
+        continue
+      }
+      const para: string[] = []
+      while (i < lines.length && lines[i].trim() !== '') { para.push(lines[i]); i++ }
+      out.push(h('p', { key: 'p' + p + '-' + out.length, className: 'forge-md-p' }, inlineMd(para.join('\n'))))
+    }
+  }
+  return out
 }
 
 export async function apply(ctx: Context): Promise<void> {
@@ -311,11 +426,11 @@ export async function apply(ctx: Context): Promise<void> {
         h('div', { className: 'forge-body' },
           h('div', { className: 'forge-q' },
             h('span', { className: 'forge-type ' + (isChoice ? 'forge-t-choice' : 'forge-t-open') }, isChoice ? '选择题' : '开放题'),
-            h('div', { className: 'forge-stem' }, q.stem),
+            h('div', { className: 'forge-stem' }, renderMd(q.stem)),
             isChoice && q.options
               ? h('div', null, q.options.map((o) =>
                   h('div', { key: o.key, className: 'forge-opt' + (selected === o.key ? ' sel' : ''), onClick: () => updateSelected(o.key) },
-                    h('span', { className: 'k' }, o.key), h('span', null, o.text))))
+                    h('span', { className: 'k' }, o.key), h('span', null, renderMd(o.text)))))
               : null,
             h('textarea', { className: 'forge-txt', value: note, placeholder: isChoice ? '写出你选择这个答案的理由…' : '请详细作答…', onChange: (e: { target: { value: string } }) => updateNote(e.target.value) }),
             h('div', { className: 'forge-actions' },

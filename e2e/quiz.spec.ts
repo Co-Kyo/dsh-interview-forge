@@ -50,6 +50,43 @@ function seedQuiz(tag: string): string {
   return sid;
 }
 
+/** 种入 markdown 富文本练习（对齐 v29 renderMd 覆盖面：围栏代码/行内标记/表格/列表）。 */
+function seedQuizMd(tag: string): string {
+  const d = new Date();
+  const dateDir = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const idx = TAGS.indexOf(tag);
+  const sid = `if-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-00001${idx >= 0 ? idx + 1 : 1}`;
+  const dir = `${ARCHIVE}/sessions/${dateDir}`;
+  seededSids.push(sid);
+  mkdirSync(dir, { recursive: true });
+  const quiz = {
+    meta: { title: `[E2E:${tag}] Markdown 渲染冒烟`, tags: ['e2e'] },
+    totalQuestions: 3,
+    questions: [
+      {
+        id: 'q1', type: 'choice',
+        stem: '**重点**：阅读以下代码，`reactive` 返回的是什么？\n\n```js\nconst obj = reactive({ n: 0 })\nconsole.log(obj.n)\n```',
+        options: [
+          { key: 'A', text: '原始对象的 `ref()` 包裹' },
+          { key: 'B', text: '基于 Proxy 的响应式代理（深层）' },
+          { key: 'C', text: '普通对象拷贝，无响应式' },
+          { key: 'D', text: '抛出 *TypeError*' },
+        ],
+        answer: 'B',
+      },
+      {
+        id: 'q2', type: 'choice',
+        stem: '| 特性 | ref | reactive |\n| --- | :--: | --- |\n| 基本类型 | ✅ | ❌ |\n| 对象 | ⭕️ | ✅ |\n\n- 列表项一\n- 列表项二',
+        options: [{ key: 'A', text: 'A' }, { key: 'B', text: 'B' }, { key: 'C', text: 'C' }, { key: 'D', text: 'D' }],
+        answer: 'A',
+      },
+      { id: 'q3', type: 'choice', stem: 'E2E-Q3 占位', options: [{ key: 'A', text: 'A' }, { key: 'B', text: 'B' }], answer: 'A' },
+    ],
+  };
+  writeFileSync(`${dir}/quiz-${sid}.json`, JSON.stringify(quiz, null, 2));
+  return sid;
+}
+
 test.afterAll(() => {
   for (const sid of new Set(seededSids)) {
     const m = /^if-(\d{4})(\d{2})(\d{2})-/.exec(sid);
@@ -204,5 +241,35 @@ test.describe('InterviewForge 答题流程', () => {
 
     const snap = await forgeRpc<{ answers: Record<string, { note?: string }> }>(page, 'snapshot', { sessionId: sid });
     expect(snap.answers.q1?.note).toContain(DRAFT_MARK);
+  });
+});
+
+test.describe('InterviewForge Markdown 渲染', () => {
+  // 对齐 v29 renderMd 语义：围栏代码块 / 行内代码·粗体·斜体 / 表格（含对齐）/ 列表
+  test('T4 题干与选项的 markdown 渲染为富文本元素', async ({ page }) => {
+    const sid = seedQuizMd('t4-md');
+    await openQuiz(page, sid);
+    const stem = page.locator('.forge-stem');
+
+    // 围栏代码块：pre>code 且无裸反引号
+    await expect(page.locator('.forge-stem pre.forge-md-pre code')).toContainText('const obj = reactive', { timeout: 10_000 });
+    expect(await stem.innerText()).not.toContain('```');
+    // 行内代码与粗体
+    await expect(page.locator('.forge-stem code.forge-md-code').first()).toHaveText('reactive');
+    await expect(page.locator('.forge-stem strong')).toHaveText('重点');
+    expect(await stem.innerText()).not.toContain('**');
+
+    // 选项中的行内标记
+    await expect(page.locator('.forge-opt code.forge-md-code')).toHaveText(['ref()']);
+
+    // 提交进入 Q2：表格 + 列表
+    await page.locator('.forge-opt').first().click();
+    await page.locator('.forge-txt').fill('md 渲染冒烟作答');
+    await page.locator('button', { hasText: '提交并下一题' }).click();
+    await expect(page.locator('.forge-card-head', { hasText: '第 2/3 题' })).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('.forge-stem table.forge-md-table thead th')).toHaveText(['特性', 'ref', 'reactive']);
+    await expect(page.locator('.forge-stem table.forge-md-table tbody tr')).toHaveCount(2);
+    await expect(page.locator('.forge-stem ul.forge-md-list li')).toHaveText(['列表项一', '列表项二']);
+    expect(await stem.innerText()).not.toContain('| ---');
   });
 });
