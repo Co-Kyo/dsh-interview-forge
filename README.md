@@ -4,14 +4,14 @@ InterviewForge 速练 —— 标准 DSH 宿主插件 bundle：出题 → ⚡浮�
 
 - **host 半区**：注册三个模型工具（`forge_start` / `forge_result` / `forge_report_ready`）+ `ForgeGateway`（TypertRemoteService，10 个 `@Remote` 方法），磁盘持久档案
 - **client 半区**：浏览器 ⚡ 速练浮层（队列 / 答题视图 / 报告模态框 / 历史日历 / 明暗主题），经 `ctx.remote.forge.*` 调用 host
-- **资源随包**：quiz/attribution schema、归因规范 references、`render-report.cjs`
+- **配套 skill 随包**：`skill/` 目录经 `ctx.skills.registerProvider(...)` 挂进宿主 skill 注册表（官方 skill-badge 同款模式）——装一个包 = 工具 + UI + skill 三件套同版本
 
 ## 安装
 
 ```sh
 # 方式 A：Release tarball（预构建，推荐——无需构建许可）
 #   从 GitHub Releases 下载 dsh-interview-forge-<ver>.tgz 后：
-dsh plugin --profile web add ./dsh-interview-forge-0.2.0.tgz
+dsh plugin --profile web add ./dsh-interview-forge-<ver>.tgz
 
 # 方式 B：Git 直装（源码形式，pnpm 会执行 prepare 构建）
 dsh plugin --profile web add github:<owner>/dsh-interview-forge#main
@@ -24,18 +24,21 @@ dsh plugin --profile web add ./forge-plugin
 
 装完重启 `dsh web` 即随启动加载。对 agent 说「开始练习」即可进入闭环。
 
+> **从旧版升级**：若曾把本 skill 手工装在 `~/.dsh/skills/interview-forge`，请删除该目录——
+> v0.3.0 起 skill 随插件包分发（provider 挂载），手工副本会按「就近层优先」规则遮蔽随包版本。
+
 ## 工程结构
 
 ```
 dsh-interview-forge/
   package.json          # dsh.bundle.patch + dsh.client 声明；@deepseek-ai/* 走 peerDependencies
   cordis.patch.yml      # 两行插件挂载：interview-forge(host) / interview-forge-client(client)
-  lib/index.js          # host 入口：apply(ctx)，三工具 ctx.tools.register(defineTool) + ForgeGateway 注册
+  lib/index.js          # host 入口：三工具 + ForgeGateway 注册 + 配套 skill provider
   lib/forge-gateway.js  # esbuild 产物：TypertRemoteService 'forge'，SRC 回退路由 forge/<method>
   src/host/             # gateway TS 源码（装饰器语义，typert-protocol 必须 external 保持同实例）
   src/client/           # 浮层 UI TS 源码（slots 注入 shell.overlay + remote.forge descriptors）
   scripts/build-*.mjs   # esbuild 构建脚本（host: ESM external 协议包；client: CJS __ModuleLoader__ 形状）
-  resources/            # schemas、references、render-report.cjs(+e2e)
+  skill/                # ★ 配套 skill canonical 真源：SKILL.md + references/ + schemas/ + scripts/render-report.cjs(+e2e)
 ```
 
 ## 关键实现约定（改代码前必读）

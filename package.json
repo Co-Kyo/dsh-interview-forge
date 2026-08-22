@@ -1,6 +1,6 @@
 {
   "name": "dsh-interview-forge",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "InterviewForge 速练：标准 DSH 宿主插件 bundle（出题→对话内答题→归因→雷达报告）。host 半区注册 forge_* 工具与 ForgeGateway Remote 服务，client 半区注册 ⚡ 速练浮层 UI。随 dsh 启动加载、重启不丢。",
   "type": "module",
   "private": true,
@@ -14,7 +14,7 @@
   },
   "files": [
     "lib",
-    "resources",
+    "skill",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"
@@ -38,6 +38,7 @@
     "prepare": "npm run build"
   },
   "peerDependencies": {
+    "@deepseek-ai/dsh-skill": ">=0.1.1-rc.1",
     "@deepseek-ai/dsh-tools": ">=0.1.1-rc.1",
     "@deepseek-ai/dsh-typert-protocol": ">=0.1.1-rc.1"
   },

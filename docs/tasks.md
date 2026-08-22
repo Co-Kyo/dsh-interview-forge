@@ -114,3 +114,24 @@
   - [ ] push tag `v0.2.0` 触发首发 Release
   - [ ] （可选）向 awesome-deepseek-harness / awesome-dsh-plugin 提 PR 收录，标注 `#bundle`
 - 备注：e2e-lab 内 api-remotes.client.js / modules 快照仍含旧名，属实验室本地快照，下次跑 E2E 时再生即可。
+
+## 🎯 v0.3.0：配套 skill 随包分发（2026-08-22 续）
+
+- **问题**：skill 存在三份已漂移拷贝（~/.dsh/skills 手工版 / interview-forge-skill 仓库 / 插件 resources），
+  且手工版 SKILL.md 的「动态插件自举」流程在静态 bundle 时代已过时。
+- **官方机制**（源码证据）：`packages/skill/skill-badge` = 插件自带 skill 的标准形状——
+  `inject=['skills']` + `ctx.skills.registerProvider(...)`，resourceBase 指向包内目录；
+  layered-skill-registry 笔记确认 repository plugin 的 provider 落全局层、对所有挂 tool-skill 的会话可见。
+- **实现**：
+  - `resources/` 整体迁入 `skill/`（references + schemas + scripts/render-report.cjs(+e2e)），git mv 保历史；
+    md5 确认迁移前 render-report.cjs 两份一致，resources 为最新代真源
+  - 新 SKILL.md：删自举步骤 → 改为「forge_* 工具就绪检查 + 安装指引」；渲染脚本路径改 scripts/；
+    运维段适配静态 bundle
+  - `lib/index.js`：inject 增 `skills`；按 badge 模式注册 provider（candidate name=interview-forge、
+    rank=BUNDLED_SKILL_RANK(600)、source=bundled）；ctx.skills 缺失时降级不阻塞工具
+  - package.json：files resources→skill；peerDependencies 增 `@deepseek-ai/dsh-skill`
+- **验证**：假 ctx 冒烟全绿（provider list/get、resourceBase、SKILL.md 内容无自举残留）；
+  预检 PASS(0 warning)；dump-config 行并入正常；v0.3.0.tgz 含 skill/ 全量
+- **退役**：`~/.dsh/skills/interview-forge` 手工副本移出至 `_retired/manual-skill-backup-20260822`
+  （就近层优先规则会遮蔽随包版，必须移除；系统 skill 目录已实时确认消失）；
+  `interview-forge-skill/` 工作区仓库标记 deprecated 指向本仓。
