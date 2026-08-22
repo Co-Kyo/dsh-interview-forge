@@ -1,16 +1,16 @@
 # InterviewForge 速练 bundle 补丁：把自己的插件行挂进任一 profile。
 # 由 package.json#dsh.bundle.patch 引用，profile 叠加本层后，loader 在 profile 的
-# node_modules 中按包名解析并实例化 interview-forge-plugin，从而随 dsh 启动加载。
+# node_modules 中按包名解析并实例化 dsh-interview-forge，从而随 dsh 启动加载。
 - insert:
     # host 半边：注册 InterviewForge 工具（出题 / 报告就绪 / 结果）。
     # 实时 client 数据通路（list/snapshot/answer/finish/...）由 TypertRemoteService
-    # 暴露为公开 Remote 服务，client 半边通过 ctx.remote 调用（见 lib/service.js）。
+    # 暴露为公开 Remote 服务，client 半边通过 ctx.remote 调用（见 lib/forge-gateway.js）。
     - id: interview-forge
-      name: interview-forge-plugin
+      name: dsh-interview-forge
 
     # client 半边：浏览器速练 UI（⚡ FAB + 答题框 + 报告框 + 历史日历）。
     # 通过 dsh.client 浏览器 roster 机制挂载（见 dsh-web-app bundle 约定）。
     - id: interview-forge-client
-      name: interview-forge-plugin
+      name: dsh-interview-forge
       config:
         role: client

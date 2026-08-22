@@ -88,3 +88,29 @@
   现场排查只需刷新后读一个全局变量。
 - **验证**：`overlay.e2e.mjs` 7/7、`quiz.e2e.mjs` 5/5（题干/4 选项/理由框/进度头/截图）。
   override.js 报错证实为浏览器扩展噪音（干净浏览器 0 出现；服务端无此文件）。
+
+## 🚀 方案 B：GitHub 发布对接 + 包改名（2026-08-22）
+
+- **定名**：调研 DSH 插件生态命名（awesome 列表 / `#dsh` topic），主流为 `dsh-<功能名>`；
+  官方 publish.md 示例包名即 `dsh-hello-plugin`。定名 **`dsh-interview-forge`**，npm 包名同步改（版本升 0.2.0）。
+- **改名落点**：package.json / cordis.patch.yml 两行 / src/client/forge-remote.ts 33 处
+  （descriptor id/typeSymbol 前缀）/ README 重写 / LICENSE 新增（MIT, Co-Kyo）。
+- **依赖重构（发布正确性关键）**：`@deepseek-ai/dsh-tools|dsh-typert-protocol` 从 dependencies 改 **peerDependencies**。
+  依据宿主源码 `packages/boot/app-boot/src/profile.ts`：模块两锚点解析 + `$DSH_HOME/profiles/node_modules`
+  平铺回退目录把安装闭包 symlink 给 profile —— peer 不装副本，parent-walk 命中宿主同实例（WeakMap 标记一致，
+  forge/* RPC 才通）；声明 dependencies 会在用户机器被 pnpm 装出第二实例遮蔽回退 → 必现 404。
+  zod 仅 client bundle 内联使用，移出运行时依赖。
+- **CI**：新增 `.github/workflows/release.yml` —— push tag `v*` → 校验 tag=package 版本 → npm ci →
+  build 双半区 → npm pack → tgz 挂 GitHub Release（softprops/action-gh-release）。用户免构建许可。
+- **产物**：`dsh-interview-forge-0.2.0.tgz`（lib×3 + resources + patch + README + LICENSE，无 node_modules/secrets）；
+  官方预检 PASS(0 warning)；删除过期旧包 interview-forge-plugin-0.1.0.tgz（落后 24 commits）。
+- **本机接线**：`~/.dsh/profiles/node_modules/interview-forge-plugin` symlink 改名为 `dsh-interview-forge`；
+  `~/.dsh/profiles/web/cordis.patch.yml` 行引用同步。`dsh --profile web --dump-config` 验证
+  `- id: interview-forge / name: dsh-interview-forge` 并入无解析错误。**生效需重启 dsh web**。
+- **待办（需用户 GitHub 账号操作）**：
+  - [ ] GitHub 建仓 `dsh-interview-forge`（建议 Public + MIT 已备）
+  - [ ] `git remote add origin git@github.com:<owner>/dsh-interview-forge.git && git push -u origin main`
+  - [ ] 打 topics：`dsh`、`dsh-plugin`（生态发现用）
+  - [ ] push tag `v0.2.0` 触发首发 Release
+  - [ ] （可选）向 awesome-deepseek-harness / awesome-dsh-plugin 提 PR 收录，标注 `#bundle`
+- 备注：e2e-lab 内 api-remotes.client.js / modules 快照仍含旧名，属实验室本地快照，下次跑 E2E 时再生即可。

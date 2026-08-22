@@ -1,54 +1,68 @@
-# InterviewForge 速练 — 标准 DSH 宿主插件（完整可分发包）
+# dsh-interview-forge
 
-把 InterviewForge 速练从"动态 harness 插件（会话内存、重启即失）"改造为**一套完整的标准 DSH 插件 bundle**：
-随 dsh 启动加载、进程重启不丢、可在本地（私有，无需开源 GitHub）安装。
+InterviewForge 速练 —— 标准 DSH 宿主插件 bundle：出题 → ⚡浮层答题 → 交叉检验归因 → 雷达报告，随 `dsh` 启动加载、进程重启不丢。
 
-- 出题：`forge_start` — 把符合 `quiz.schema.json` 的题库落盘并创建会话
-- 归因/报告：`forge_result` 取结果 → subagent 归因 → `resources/render-report.cjs` 渲染 → `forge_report_ready` 登记
-- 资源随包：`resources/schemas`、`resources/references`、`resources/render-report.cjs`
+- **host 半区**：注册三个模型工具（`forge_start` / `forge_result` / `forge_report_ready`）+ `ForgeGateway`（TypertRemoteService，10 个 `@Remote` 方法），磁盘持久档案
+- **client 半区**：浏览器 ⚡ 速练浮层（队列 / 答题视图 / 报告模态框 / 历史日历 / 明暗主题），经 `ctx.remote.forge.*` 调用 host
+- **资源随包**：quiz/attribution schema、归因规范 references、`render-report.cjs`
 
-## 安装（本地，无需 GitHub）
-```bash
-# 方式 A：本地目录
+## 安装
+
+```sh
+# 方式 A：Release tarball（预构建，推荐——无需构建许可）
+#   从 GitHub Releases 下载 dsh-interview-forge-<ver>.tgz 后：
+dsh plugin --profile web add ./dsh-interview-forge-0.2.0.tgz
+
+# 方式 B：Git 直装（源码形式，pnpm 会执行 prepare 构建）
+dsh plugin --profile web add github:<owner>/dsh-interview-forge#main
+#   pnpm ≥10 首次会要求允许构建：把 pnpm 打印的包名写进 profile 的
+#   pnpm-workspace.yaml → allowBuilds: { "dsh-interview-forge": true } 后重试
+
+# 方式 C：本地目录（开发联调）
 dsh plugin --profile web add ./forge-plugin
-# 方式 B：压缩包（先 pnpm pack 打出 interview-forge-plugin-0.1.0.tgz）
-dsh plugin --profile web add ./interview-forge-plugin-0.1.0.tgz
 ```
-装好后 profile 的 `cordis.patch.yml` 挂载 `interview-forge` 行（见本包 `cordis.patch.yml`），重启 `dsh web` 即随启动加载。
 
-> 说明：`dsh plugin add` 是把参数转发给 profile 目录里的 **pnpm**，pnpm 天然支持本地路径与 tarball，所以完全不必开源。
+装完重启 `dsh web` 即随启动加载。对 agent 说「开始练习」即可进入闭环。
 
 ## 工程结构
+
 ```
-forge-plugin/
-  package.json          # interview-forge-plugin + dsh.bundle.patch → cordis.patch.yml
-  cordis.patch.yml      # 插件行挂载（host；client 见下）
-  lib/index.js          # host 半边：标准宿主插件 apply(ctx)，三工具 ctx.tools.register(defineTool)
-  lib/service.js        # （下一阶段）host 跨端数据层 TypertRemoteService
-  lib/client.js         # （下一阶段）client 半边：ctx.slots 速练 UI + ctx.remote 调 host
-  resources/            # 随包分发：quiz/attribution schema、references 归因规范、render-report.cjs(+e2e)
+dsh-interview-forge/
+  package.json          # dsh.bundle.patch + dsh.client 声明；@deepseek-ai/* 走 peerDependencies
+  cordis.patch.yml      # 两行插件挂载：interview-forge(host) / interview-forge-client(client)
+  lib/index.js          # host 入口：apply(ctx)，三工具 ctx.tools.register(defineTool) + ForgeGateway 注册
+  lib/forge-gateway.js  # esbuild 产物：TypertRemoteService 'forge'，SRC 回退路由 forge/<method>
+  src/host/             # gateway TS 源码（装饰器语义，typert-protocol 必须 external 保持同实例）
+  src/client/           # 浮层 UI TS 源码（slots 注入 shell.overlay + remote.forge descriptors）
+  scripts/build-*.mjs   # esbuild 构建脚本（host: ESM external 协议包；client: CJS __ModuleLoader__ 形状）
+  resources/            # schemas、references、render-report.cjs(+e2e)
 ```
 
-## host 半边能力（当前已实现并 loader 集成验证通过）
-- `ctx.tools.register(defineTool(...))` 注册：
-  - `forge_start`：题库落盘 `interview-forge-archive/sessions/{date}/quiz-{sid}.json`，建会话
-  - `forge_result`：取最新（或指定）会话结果
-  - `forge_report_ready`：读 `report-{sid}.html` 标记报告就绪
-- 数据**双持久**：内存 Map + 磁盘 archive；启动（重启后）可从磁盘扫描恢复历史（schedule 会话/报告/历史看板）。
-- 主进程 loader 合成已由 `dsh --profile web --patch … --dump-config` 验证并入（无包解析失败）。
+## 关键实现约定（改代码前必读）
+
+1. **依赖必须 peer**：`@deepseek-ai/dsh-typert-protocol` 的 `@Remote` 标记存于模块私有 WeakMap，
+   插件与宿主若解析到两个物理实例，`forge/*` RPC 直接 404。DSH 通过 `$DSH_HOME/profiles/node_modules`
+   平铺回退目录把安装闭包 symlink 给所有 profile —— 声明成 `dependencies` 反而会被 pnpm 装出第二实例遮蔽回退。
+2. **client 勿在 inject 里声明 `remote.forge`**：自等死锁。声明 `['slots','remote']`，apply 内
+   `$mount(...)` 之后用点分键 `ctx.get('remote.forge')` 取用。
+3. **信封解包**：SDK resolve 的是 `{ok,value}` 信封，取值前必须 unwrap，且只包装真方法（Proxy 防御）。
+4. 详见 `docs/troubleshooting.md`（6 类历史坑）与 `docs/architecture.md`。
 
 ## 数据路径（重启不丢）
+
 ```
 {workspace}/interview-forge-archive/sessions/{YYYY-MM-DD}/
   quiz-{sid}.json / result-{sid}.json / attribution-{sid}.json / report-{sid}.html / seed-{sid}.json
 ```
 
-## 当前状态与下一步
-- ✅ host 半边标准 bundle：工具、磁盘持久、loader 集成验证、资源随包、本地安装打 tarball。
-- ⏳ client 半边（⚡速练浮层/答题/报告 UI）：`ctx.slots` 注册已兼容，但跨端 `host.call → ctx.remote.<svc>` 需宿主
-  `TypertRemoteService`（TS + typert 生成管线）——DSH 为 preview，建议用官方 `dsh-plugin-development` 脚手架
-  生成 TS 工程后实现（见 README 顶部说明）。
+重启后 host 会多锚点发现档案根并懒水合历史条目；磁盘清理即时生效（list/history 自愈出列）。
+
+## 发布流程
+
+push tag `v*` → GitHub Actions 自动构建双半区 → `npm pack` → tgz 自动挂到 Release。
+版本号在 `package.json` 手工维护，tag 与之同步（如 `v0.2.0`）。
 
 ## 注意
-- DSH 处于开发者预览，接口可能有破坏性变更；固定依赖版本（`@deepseek-ai/dsh-tools@0.1.0-rc.7`）。
-- 仅公开 host bundle 时，答题交互仍由 agent 在对话内引导；浏览器实时浮层 UI 待 client 半边接入后启用。
+
+- DSH 处于开发者预览，接口可能有破坏性变更；peer 范围 `>=0.1.1-rc.1` 对齐当前宿主实例。
+- MIT License。

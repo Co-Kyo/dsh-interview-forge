@@ -1,0 +1,45 @@
+name: Release
+
+# push v* tag → 构建双半区 → npm pack → tgz 挂 Release
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # 校验 tag 与 package.json 版本一致，防呆
+      - name: Verify tag matches package version
+        run: |
+          PKG_VER="v$(node -p "require('./package.json').version")"
+          if [ "$PKG_VER" != "${{ github.ref_name }}" ]; then
+            echo "::error::tag ${{ github.ref_name }} != package.json $PKG_VER"
+            exit 1
+          fi
+
+      - name: Install build toolchain
+        run: npm ci
+
+      - name: Build host + client bundles
+        run: npm run build
+
+      - name: Pack tarball
+        run: npm pack
+
+      - name: Create GitHub Release with tarball
+        uses: softprops/action-gh-release@v2
+        with:
+          files: '*.tgz'
+          generate_release_notes: true
