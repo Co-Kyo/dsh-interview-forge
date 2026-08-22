@@ -273,3 +273,26 @@ test.describe('InterviewForge Markdown 渲染', () => {
     expect(await stem.innerText()).not.toContain('| ---');
   });
 });
+
+test.describe('InterviewForge Markdown 视觉样式', () => {
+  // 用户反馈：代码背景框与选项框区分度不够。根因：代码块底色用了与题干卡
+  // 相同的 bg-module-platform 令牌 —— 代码块在卡片内隐形。
+  test('T5 代码块与题干卡、选项框有明确视觉区分', async ({ page }) => {
+    const sid = seedQuizMd('t5-mdstyle');
+    await openQuiz(page, sid);
+    await page.waitForSelector('.forge-md-pre', { timeout: 10_000 }); // 等题目渲染完成再取样式
+    const s = await page.evaluate(() => {
+      const cs = (sel) => { const el = document.querySelector(sel); return el ? getComputedStyle(el) : null }
+      const lum = (rgb) => { const m = String(rgb).match(/\d+/g); return m ? 0.2126 * Number(m[0]) + 0.7152 * Number(m[1]) + 0.0722 * Number(m[2]) : -1 }
+      const pre = cs('.forge-md-pre'), opt = cs('.forge-opt'), card = cs('.forge-q');
+      return {
+        preLeftBar: pre ? parseFloat(pre.borderLeftWidth) : 0,
+        deltaPreOpt: Math.abs(lum(pre?.backgroundColor) - lum(opt?.backgroundColor)),
+        deltaPreCard: Math.abs(lum(pre?.backgroundColor) - lum(card?.backgroundColor)),
+      };
+    });
+    expect(s.preLeftBar, '代码块应有 ≥3px 品牌色左侧强调条（区别于选项的整框描边）').toBeGreaterThanOrEqual(3);
+    expect(s.deltaPreOpt, '代码块与选项框底色亮度差应 >24').toBeGreaterThan(24);
+    expect(s.deltaPreCard, '代码块不应与题干卡同色（亮度差应 >18）').toBeGreaterThan(18);
+  });
+});

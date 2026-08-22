@@ -52,9 +52,12 @@ const CSS = [
   // ---- markdown 富文本（对齐 v29 forge-md-*，色板走 DSW 主题令牌） ----
   '.forge-stem p,.forge-opt span:last-child p{margin:0 0 10px}',
   '.forge-stem > :last-child{margin-bottom:0}',
-  '.forge-md-code{font-family:SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:.88em;font-weight:500;background:var(--dsw-alias-bg-module-platform,#f2f3f7);color:var(--dsw-alias-label-primary,#1c1c22);padding:2px 6px;border-radius:4px}',
-  '.forge-md-pre{background:var(--dsw-alias-bg-module-platform,#f2f3f7);border:1px solid var(--dsw-alias-border-l2,#e8e9ef);border-radius:8px;padding:14px;overflow-x:auto;margin:12px 0;text-align:left}',
-  '.forge-md-pre code{display:block;background:none;color:var(--dsw-alias-label-primary,#1c1c22);font-family:SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:.85rem;line-height:1.6;white-space:pre-wrap;word-break:break-word}',
+  // 代码块：编辑器式深色面（浅深主题下都与题干卡/选项框强区分）+ 品牌左侧强调条
+  '.forge-md-pre{background:#151c2e;border:1px solid #26304a;border-left:4px solid var(--dsw-alias-brand-primary-new-colorprimary-new-color,#2f6bff);border-radius:8px;padding:12px 14px;overflow-x:auto;margin:12px 0;text-align:left}',
+  '.forge-md-pre code{display:block;background:none;color:#dce5f5;font-family:SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:.85rem;line-height:1.6;white-space:pre-wrap;word-break:break-word}',
+  'body[data-ds-dark-theme] .forge-md-pre{background:#101627;border-color:#202a44}',
+  '.forge-md-code{font-family:SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:.88em;font-weight:500;background:#e8eeff;color:inherit;padding:2px 6px;border-radius:4px}',
+  'body[data-ds-dark-theme] .forge-md-code{background:#232c45}',
   '.forge-md-list{padding-left:20px;margin:10px 0}',
   '.forge-md-list li{margin-bottom:4px}',
   '.forge-md-table{border-collapse:collapse;margin:12px 0;font-size:.9rem;width:100%}',
