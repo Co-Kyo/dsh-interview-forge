@@ -152,21 +152,28 @@ async function discoverRoots(ctx: Context): Promise<string[]> {
   if (store.lastArchiveDir) roots.push(store.lastArchiveDir)
   if (store.lastWorkspace) roots.push(store.lastWorkspace + '/interview-forge-archive')
   try { if (process.cwd()) roots.push(process.cwd() + '/interview-forge-archive') } catch { /* noop */ }
-  // 插件自身位置锚点：本部署为工作区 link 安装（<workspace>/forge-plugin/lib/），
-  // 从 import.meta.url 反推工作区根，进程 cwd 无关、重启可靠。
+  // 模块位置锚点：沿模块目录向上收集各级祖先（覆盖两种安装几何）：
+  //  - 工作区 checkout：<workspace>/forge-plugin/lib/ → 祖先含 <workspace> → 命中档案根
+  //  - npm pack 安装：<profile>/node_modules/dsh-interview-forge/lib/ → 包目录已不在
+  //    工作区之下，此锚点通常不命中（候选不存在时无害），靠会话 cwd 兜底
   try {
     const here = decodeURIComponent(new URL('.', import.meta.url).pathname)
-    const ws = here.replace(/\/lib\/$/, '').replace(/\/forge-plugin$/, '')
-    if (ws && ws !== here) roots.push(ws + '/interview-forge-archive')
+    let dir = here.replace(/\/$/, '')
+    for (let i = 0; i < 6 && dir && dir !== '/'; i++) {
+      roots.push(dir + '/interview-forge-archive')
+      dir = dir.slice(0, dir.lastIndexOf('/'))
+    }
   } catch { /* noop */ }
-  // 从活跃会话头收集 cwd（会话服务可枚举时）
+  // 从活跃会话头收集 cwd（会话服务可枚举时）。dsh-session 服务暴露 list()，
+  // 返回带冻结创建头（header.cwd 为校验过的绝对路径）的活会话。
   try {
     const sessions: any = (ctx as any).get('sessions')
     const vals: any[] =
-      sessions && typeof sessions.values === 'function' ? [...sessions.values()] :
+      typeof sessions?.list === 'function' ? sessions.list() :
+      typeof sessions?.values === 'function' ? [...sessions.values()] :
       sessions && typeof sessions[Symbol.iterator] === 'function' ? [...sessions] : []
     for (const s of vals) {
-      const cwd = s && s.header && s.header.cwd
+      const cwd = s && (s.header?.cwd ?? s.header?.get?.('cwd'))
       if (cwd) roots.push(String(cwd) + '/interview-forge-archive')
     }
   } catch { /* noop */ }

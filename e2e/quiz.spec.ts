@@ -108,6 +108,27 @@ function secOf(text: string | null): number {
 
 test.describe('InterviewForge 答题流程', () => {
 
+  /** 预检：live 宿主必须能从磁盘发现种子场次。失败通常意味着宿主档案根发现
+   *  （discoverRoots）失效 —— 部署了修复但尚未重启 dsh 时会走到这里。 */
+  test.beforeAll(async ({ browser }) => {
+    const page = await browser.newPage();
+    const sid = seedQuiz('preflight');
+    await page.goto('/');
+    await page.waitForSelector('.forge-fab', { timeout: 20_000 });
+    await page.click('.forge-fab');
+    const item = page.locator('.forge-item', { hasText: sid });
+    try {
+      await item.waitFor({ timeout: 10_000 });
+    } catch {
+      throw new Error(
+        '预检失败：live 宿主未从磁盘发现种子场次 ' + sid +
+        '。最常见原因：宿主 forge-gateway 的 discoverRoots 修复已部署但 dsh 尚未重启（旧进程仍在用旧锚点几何）。请重启 dsh 后重跑。',
+      );
+    } finally {
+      await page.close();
+    }
+  });
+
   test('T1 计时器：打开即出现并持续递增', async ({ page }) => {
     const sid = seedQuiz('t1-timer');
     await openQuiz(page, sid);
