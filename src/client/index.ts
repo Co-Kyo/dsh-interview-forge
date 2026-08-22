@@ -199,8 +199,59 @@ export async function apply(ctx: Context): Promise<void> {
     const [view, setView] = React.useState<{ status: string; currentIndex: number; answers: Record<string, unknown>; elapsedGlobal: number; elapsedQuestion: number } | null>(null)
     const [selected, setSelected] = React.useState('')
     const [note, setNote] = React.useState('')
-    const qid = quiz ? quiz.questions[view?.currentIndex || 0]?.id : ''
+    const [clientElapsedGlobal, setClientElapsedGlobal] = React.useState(0)
+    const [clientElapsedQuestion, setClientElapsedQuestion] = React.useState(0)
+    const globalStartRef = React.useRef<number>(Date.now())
+    const questionStartRef = React.useRef<number>(Date.now())
+    // ---- 草稿簿：按题键控的本地真值。切题/收起/卸载先落盘再恢复，杜绝串台与丢字 ----
+    const draftsRef = React.useRef<Record<string, { selected: string; note: string }>>({})
+    const inputQidRef = React.useRef<string>('')
+    const saveTimerRef = React.useRef<number | null>(null)
+    const currentQid = quiz && view ? (quiz.questions[view.currentIndex]?.id || '') : ''
+    const flushDraft = (qid?: string) => {
+      const target = qid || inputQidRef.current
+      if (saveTimerRef.current) { window.clearTimeout(saveTimerRef.current); saveTimerRef.current = null }
+      const d = draftsRef.current[target]
+      if (!target || !d || (!d.selected && !d.note)) return
+      props.rpc.answer({ sessionId: props.sessionId, questionId: target, selected: d.selected || null, note: d.note || null }).catch(() => {})
+    }
+    const scheduleDraftSave = () => {
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = window.setTimeout(() => flushDraft(), 400)
+    }
+    const updateSelected = (v: string) => {
+      setSelected(v)
+      const qid = inputQidRef.current
+      draftsRef.current[qid] = { selected: v, note: (draftsRef.current[qid] || { selected: '', note: '' }).note }
+      scheduleDraftSave()
+    }
+    const updateNote = (v: string) => {
+      setNote(v)
+      const qid = inputQidRef.current
+      draftsRef.current[qid] = { selected: (draftsRef.current[qid] || { selected: '', note: '' }).selected, note: v }
+      scheduleDraftSave()
+    }
+    // 切题：先把旧题草稿落盘，再恢复新题（本地草稿优先，宿主 answers 兜底）
     React.useEffect(() => {
+      if (!currentQid) return
+      if (inputQidRef.current === currentQid) return
+      flushDraft()
+      inputQidRef.current = currentQid
+      const stored = (view?.answers as Record<string, { selected?: string; note?: string }> | undefined)?.[currentQid]
+      const restored = {
+        selected: draftsRef.current[currentQid]?.selected || stored?.selected || '',
+        note: draftsRef.current[currentQid]?.note || stored?.note || '',
+      }
+      draftsRef.current[currentQid] = restored
+      setSelected(restored.selected)
+      setNote(restored.note)
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentQid, view?.answers])
+    // 卸载兜底：收起 / 关闭 / 切场次都会触发，防抖窗口内的草稿不丢
+    React.useEffect(() => () => flushDraft(), [])
+    React.useEffect(() => {
+      // v29 对齐：openQuiz 即 forge.resume —— 首次开题启动计时，收起后重开恢复计时
+      props.rpc.resume({ sessionId: props.sessionId }).catch(() => {})
       props.rpc.applySeed({ sessionId: props.sessionId }).catch(() => {})
       props.rpc.load({ sessionId: props.sessionId }).then((d) => { if (d && d.quiz) setQuiz(d.quiz) }).catch(() => {})
       const poll = () => { props.rpc.snapshot({ sessionId: props.sessionId }).then((d) => { if (d) setView(d) }).catch(() => {}) }
@@ -208,6 +259,27 @@ export async function apply(ctx: Context): Promise<void> {
       const iv = window.setInterval(poll, 1000)
       return () => window.clearInterval(iv)
     }, [props.sessionId])
+
+    // 客户端计时器兜底，确保计时器始终运转
+    React.useEffect(() => {
+      const timer = window.setInterval(() => {
+        setClientElapsedGlobal(Math.floor((Date.now() - globalStartRef.current) / 1000))
+        setClientElapsedQuestion(Math.floor((Date.now() - questionStartRef.current) / 1000))
+      }, 1000)
+      return () => window.clearInterval(timer)
+    }, [])
+
+    // 题切换时重置本题计时起点
+    React.useEffect(() => {
+      questionStartRef.current = Date.now() - (view?.elapsedQuestion ? view.elapsedQuestion * 1000 : 0)
+    }, [view?.currentIndex, view?.elapsedQuestion])
+
+    // 恢复全局计时起点，避免收起后重开归零
+    React.useEffect(() => {
+      if (view?.elapsedGlobal != null) {
+        globalStartRef.current = Date.now() - view.elapsedGlobal * 1000
+      }
+    }, [view?.elapsedGlobal])
 
     if (!quiz || !view) return h('div', { className: 'forge-modal' }, h('div', { className: 'forge-card' }, h('div', { className: 'forge-empty' }, '加载中…')))
     if (view.status !== 'answering') {
@@ -220,18 +292,21 @@ export async function apply(ctx: Context): Promise<void> {
     const isLast = view.currentIndex >= quiz.questions.length - 1
     const isChoice = q.type === 'choice'
     const canSubmit = isChoice ? !!(selected && note.trim()) : !!note.trim()
-    const submit = () => {
-      if (!canSubmit) return
-      props.rpc.answer({ sessionId: props.sessionId, questionId: q.id, selected: isChoice ? selected : null, note: note || null }).then(() => {
-        if (isLast) props.rpc.finish({ sessionId: props.sessionId }).then(() => { pollNow() }).catch(() => {})
-        else props.rpc.nav({ sessionId: props.sessionId, index: view.currentIndex + 1 }).then(pollNow).catch(() => {})
-      }).catch(() => {})
+    const fmt = (s: number) => {
+      const m = Math.floor(s/60); const sec = s%60; return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0')
     }
     const pollNow = () => { props.rpc.snapshot({ sessionId: props.sessionId }).then((d) => { if (d) setView(d) }).catch(() => {}) }
+    const submit = () => {
+      if (!canSubmit) return
+      flushDraft() // 立即落盘当前题（不走防抖）
+      if (isLast) props.rpc.finish({ sessionId: props.sessionId }).then(() => { pollNow() }).catch(() => {})
+      else props.rpc.nav({ sessionId: props.sessionId, index: view.currentIndex + 1 }).then(pollNow).catch(() => {})
+    }
     return h('div', { className: 'forge-modal' },
       h('div', { className: 'forge-card' },
         h('div', { className: 'forge-card-head' },
           h('span', null, '⚡ ' + quiz.meta.title + ' · 第 ' + (view.currentIndex + 1) + '/' + quiz.questions.length + ' 题'),
+          h('span', { style: { marginLeft: 12, fontSize: 12, opacity: 0.7 } }, '总 ' + fmt(view.elapsedGlobal || clientElapsedGlobal) + ' | 本题 ' + fmt((view.elapsedQuestion || 0) || clientElapsedQuestion)),
           h('button', { className: 'forge-btn', onClick: () => { props.rpc.pause({ sessionId: props.sessionId }).catch(() => {}); props.onClose() } }, '收起')),
         h('div', { className: 'forge-body' },
           h('div', { className: 'forge-q' },
@@ -239,10 +314,10 @@ export async function apply(ctx: Context): Promise<void> {
             h('div', { className: 'forge-stem' }, q.stem),
             isChoice && q.options
               ? h('div', null, q.options.map((o) =>
-                  h('div', { key: o.key, className: 'forge-opt' + (selected === o.key ? ' sel' : ''), onClick: () => setSelected(o.key) },
+                  h('div', { key: o.key, className: 'forge-opt' + (selected === o.key ? ' sel' : ''), onClick: () => updateSelected(o.key) },
                     h('span', { className: 'k' }, o.key), h('span', null, o.text))))
               : null,
-            h('textarea', { className: 'forge-txt', value: note, placeholder: isChoice ? '写出你选择这个答案的理由…' : '请详细作答…', onChange: (e: { target: { value: string } }) => setNote(e.target.value) }),
+            h('textarea', { className: 'forge-txt', value: note, placeholder: isChoice ? '写出你选择这个答案的理由…' : '请详细作答…', onChange: (e: { target: { value: string } }) => updateNote(e.target.value) }),
             h('div', { className: 'forge-actions' },
               view.currentIndex > 0 ? h('button', { className: 'forge-btn', onClick: () => props.rpc.nav({ sessionId: props.sessionId, index: view.currentIndex - 1 }).then(pollNow).catch(() => {}) }, '← 上一题') : null,
               h('button', { className: 'forge-btn accent', disabled: !canSubmit, onClick: submit }, isLast ? '完成练习' : '提交并下一题'))))))
