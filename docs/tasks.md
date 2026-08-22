@@ -147,3 +147,15 @@
   - `lib/index.js` 两工具 execute 内存未命中时兜底 `hydrateEntry/resolveLatestEntry`。
 - **验证**：模拟重启端到端三场景全绿（无参取最新=08-21 answering 场；指定 sid=reported 场含 result；
   report_ready 对水合条目 ok）；smoke-disk-recovery 回归通过；预检 PASS(0 warning)。
+
+## 📦 v0.3.2：发布包瘦身（2026-08-22 续）
+
+- **背景**：Release 资产 135KB，metafile 拆解 → client.js 未压缩 568KB 占 85%，
+  其中内联 zod 554KB（81%；浏览器模块表无 zod，只能内联）、自有 UI 源码仅 41KB（5%）。
+- **措施**：
+  - build-client.mjs 开 `minify + legalComments:'eof'`（esbuild 只混淆局部标识符，
+    typert descriptor 字符串 id / 信封 banner/footer 原样保留）→ client.js 568.6→346.3KB
+  - 孤儿测试资产 render-report.e2e.cjs 挪出发布范围（skill/scripts → scripts/，grep 确认零引用）
+- **效果**：tgz 134.9 → **118.1 KB**（-12.5%）。host gateway 保持可读未 minify（22KB 收益太小不值调试性）。
+- **验证**：banner/footer 完整、descriptor id 与 shell.overlay 均在、预检 PASS。
+- 发布清单备忘：发版时 README 徽章版本号 + 安装示例文件名要同步 sed。

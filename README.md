@@ -4,7 +4,7 @@ InterviewForge 速练 —— DeepSeek Harness 的快速练习插件：**出题 �
 
 | | |
 |---|---|
-| 当前版本 | ![v0.3.1](https://img.shields.io/badge/version-0.3.1-blue) |
+| 当前版本 | ![v0.3.1](https://img.shields.io/badge/version-0.3.2-blue) |
 | 适用环境 | DSH web profile（`@deepseek-ai/dsh-* >= 0.1.1-rc.1`） |
 | 组成 | host 工具 + 浏览器浮层 UI + 配套 skill（一个包全带） |
 | License | MIT |
@@ -21,7 +21,7 @@ InterviewForge 速练 —— DeepSeek Harness 的快速练习插件：**出题 �
 ```sh
 # 推荐：Release tarball（预构建，无需构建许可）
 # 从 https://github.com/Co-Kyo/dsh-interview-forge/releases 下载 tgz 后：
-dsh plugin --profile web add ./dsh-interview-forge-0.3.1.tgz
+dsh plugin --profile web add ./dsh-interview-forge-0.3.2.tgz
 
 # 或者：Git 直装（pnpm 会执行 prepare 构建）
 dsh plugin --profile web add github:Co-Kyo/dsh-interview-forge#main

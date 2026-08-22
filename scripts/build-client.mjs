@@ -20,6 +20,10 @@ await build({
   target: 'es2022',
   outfile: 'lib/client.js',
   external: ['react', 'react/jsx-runtime'],
+  // 发布产物压缩：zod 内联占大头（原始 ~550KB）。esbuild 只混淆局部标识符，
+  // 方法名与 typert descriptor 的字符串 id 原样保留，@Remote/信封机制不受影响。
+  minify: true,
+  legalComments: 'eof',
   banner: {
     js: `window.__ModuleLoader__.load({\n  id: ${JSON.stringify(ID)},\n  factory: (require) => {\nvar module = { exports: {} }; var exports = module.exports;`,
   },
