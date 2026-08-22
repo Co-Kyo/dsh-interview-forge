@@ -449,8 +449,8 @@ export class ForgeGateway extends TypertRemoteService {
 
   @Remote('report')
   async report(args: { sessionId: string }): Promise<{ reportHtml: string | null }> {
-    const entry = await this.ensureEntry(args.sessionId)
-    if (entry && entry.reportHtml) return { reportHtml: entry.reportHtml }
+    // 磁盘优先：报告重生成会更新磁盘文件，内存缓存的 reportHtml 可能过期；
+    // 磁盘不可达时才回退到水合条目的缓存。
     const fs: any = this.ctx.get('fs')
     const m = /^if-(\d{4})(\d{2})(\d{2})-/.exec(args.sessionId || '')
     if (fs && m) {
@@ -462,6 +462,8 @@ export class ForgeGateway extends TypertRemoteService {
         } catch { /* try next root */ }
       }
     }
+    const entry = await this.ensureEntry(args.sessionId)
+    if (entry && entry.reportHtml) return { reportHtml: entry.reportHtml }
     return { reportHtml: null }
   }
 }

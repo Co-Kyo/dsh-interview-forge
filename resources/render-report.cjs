@@ -561,7 +561,10 @@ dims.forEach((d, i) => {
   i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
 });
 ctx.closePath();
-ctx.fillStyle = 'rgba(124,140,248,0.25)';
+// 多边形填充跟随主题：从 --rpt-title 解析出的颜色派生 25% 透明度（浅色=品牌蓝、深色=淡紫，均随注入翻转）
+const _titleHex = (_RPT.title || '#7c8cf8').replace('#','');
+const _titleRgb = _titleHex.length === 3 ? _titleHex.split('').map(c => c + c).join('') : _titleHex;
+ctx.fillStyle = 'rgba(' + [0, 2, 4].map(i => parseInt(_titleRgb.slice(i, i + 2), 16)).join(',') + ',0.25)';
 ctx.fill();
 ctx.strokeStyle = _RPT.title;
 ctx.lineWidth = 2;
