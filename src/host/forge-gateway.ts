@@ -253,6 +253,20 @@ export class ForgeGateway extends TypertRemoteService {
 
   @Remote('list')
   async list(): Promise<{ entries: ReturnType<typeof toListItem>[] }> {
+    // 自愈：磁盘文件已被清理的内存条目自动出列（删除档案后无需重启即生效）
+    const fs0: any = this.ctx.get('fs')
+    if (fs0) {
+      const stale: string[] = []
+      for (const sid of store.order) {
+        const e = store.sessions.get(sid)
+        if (!e || !e.quizPath) continue
+        try { await fs0.resolve(e.quizPath) } catch { stale.push(sid) }
+      }
+      for (const sid of stale) {
+        store.sessions.delete(sid)
+        store.order = store.order.filter((s) => s !== sid)
+      }
+    }
     const entries: ReturnType<typeof toListItem>[] = []
     const seenOrder = new Set<string>()
     for (let i = store.order.length - 1; i >= 0; i--) {
@@ -298,10 +312,11 @@ export class ForgeGateway extends TypertRemoteService {
         }
       }
     }
-    // 内存条目兜底（尚未落盘或根目录不可达的会话）
+    // 内存条目兜底（尚未落盘或根目录不可达的会话）；磁盘文件已清理的条目跳过
     for (let i = store.order.length - 1; i >= 0; i--) {
       const e = store.sessions.get(store.order[i])
       if (!e || seen.has(e.sessionId)) continue
+      if (fs && e.quizPath) { try { await fs.resolve(e.quizPath) } catch { continue } }
       seen.add(e.sessionId)
       const questions = e.quiz.questions as Array<{ id: string; type?: string; answer?: string | null }>
       let correct = 0
