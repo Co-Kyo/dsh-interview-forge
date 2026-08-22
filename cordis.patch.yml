@@ -8,9 +8,6 @@
     - id: interview-forge
       name: dsh-interview-forge
 
-    # client 半边：浏览器速练 UI（⚡ FAB + 答题框 + 报告框 + 历史日历）。
-    # 通过 dsh.client 浏览器 roster 机制挂载（见 dsh-web-app bundle 约定）。
-    - id: interview-forge-client
-      name: dsh-interview-forge
-      config:
-        role: client
+    # client 半边无需 loader entry：package.json 的 dsh.client 声明会被
+    # @deepseek-ai/dsh-client-modules 自动扫描并服务 lib/client.js 给浏览器。
+    # 在这里再插一个指向包主入口的 entry 会导致 forge_* 工具重复注册。
