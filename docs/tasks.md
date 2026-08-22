@@ -135,3 +135,15 @@
 - **退役**：`~/.dsh/skills/interview-forge` 手工副本移出至 `_retired/manual-skill-backup-20260822`
   （就近层优先规则会遮蔽随包版，必须移除；系统 skill 目录已实时确认消失）；
   `interview-forge-skill/` 工作区仓库标记 deprecated 指向本仓。
+
+## 🔧 v0.3.1：forge_result/forge_report_ready 磁盘兜底（2026-08-22 续）
+
+- **问题**：重启后 `forge_result` 返回「未找到」——工具入口走纯内存 `latestEntry()`，
+  而磁盘懒水合只接在网关 list/snapshot 路径（⚡浮层）。层次定性：host 半区内部
+  「工具入口未复用网关磁盘兜底」的一致性缺口，与 client/浮层代码无关。
+- **修复**：
+  - 新增导出 `resolveLatestEntry(ctx)`：内存最新优先，否则 diskEntries 取 createdAt 最新并水合；
+  - `ensureEntry` 无 sid 分支改走它 → 浮层 9 个 @Remote 调用点同步受益；
+  - `lib/index.js` 两工具 execute 内存未命中时兜底 `hydrateEntry/resolveLatestEntry`。
+- **验证**：模拟重启端到端三场景全绿（无参取最新=08-21 answering 场；指定 sid=reported 场含 result；
+  report_ready 对水合条目 ok）；smoke-disk-recovery 回归通过；预检 PASS(0 warning)。

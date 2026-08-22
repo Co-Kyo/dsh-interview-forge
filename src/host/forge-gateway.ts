@@ -237,17 +237,29 @@ export async function diskEntries(ctx: Context): Promise<ReturnType<typeof toLis
   return out
 }
 
+/** 内存最新优先；否则取磁盘 createdAt 最新的会话并水合进内存。
+ *  工具「默认最新一组」与网关无 sid 调用的磁盘兜底：重启后内存为空也能找到历史。 */
+export async function resolveLatestEntry(ctx: Context): Promise<ForgeEntryLike | undefined> {
+  const mem = store.latestEntry()
+  if (mem) return mem
+  const list = await diskEntries(ctx)
+  if (list.length === 0) return undefined
+  const newest = list.reduce((a, b) => ((b.createdAt || 0) > (a.createdAt || 0) ? b : a))
+  return hydrateEntry(ctx, newest.sessionId)
+}
+
 // ---- Remote gateway ----
 export class ForgeGateway extends TypertRemoteService {
   constructor(ctx: Context) {
     super(ctx, 'forge')
   }
 
-  /** 内存命中则返回；否则尝试从磁盘水合历史会话。 */
+  /** 内存命中则返回；否则尝试从磁盘水合历史会话。
+   *  无 sid 时走 resolveLatestEntry（磁盘兜底取最新），不再因重启后内存为空而落空。 */
   private async ensureEntry(sid?: string): Promise<ForgeEntryLike | undefined> {
     const found = store.findEntry(sid)
     if (found) return found
-    if (!sid) return undefined
+    if (!sid) return resolveLatestEntry(this.ctx)
     return hydrateEntry(this.ctx, sid)
   }
 
