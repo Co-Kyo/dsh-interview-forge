@@ -147,6 +147,16 @@ test('W-8 对比行双列对齐：值列独立且不顶格换行', () => {
   assert.ok(styleSeg.includes('grid-template-columns:72px 1fr'), '对比行应为 标签列+值列 网格');
   assert.ok(!/.cmp-line{display:flex/.test(styleSeg), '不应再是 flex 行内换行');
 });
+// W-9 红测：四分区全部 boxed（题目区/对比区/归因区含证据/叙事风险），无裸浮行
+test('W-9 四分区盒装：题目区与归因区带边框容器，证据引文归入归因区', () => {
+  assert.ok(OPT.includes('class="qa-block"'), '题目区应有容器');
+  const styleSeg = OPT.slice(OPT.indexOf('<style>'), OPT.indexOf('</style>'));
+  assert.ok(styleSeg.includes('.qa-block{border:1px solid'), '题目区应带边框（不再隐形）');
+  assert.ok(styleSeg.includes('.attr-section{background'), '应有归因区容器样式');
+  const ai = OPT.indexOf('<div class="attr-section"');
+  assert.ok(ai >= 0, '归因区容器应在 HTML 中');
+  assert.ok(OPT.indexOf('「用户原话') > ai && OPT.indexOf('归因：') > ai, '证据引文与归因都在归因区内');
+});
 const OUT = renderFixtureHtml();
 
 test('W-1 锚点：big 卡恰好 3 处 + 八区块 h2 精确匹配', () => {

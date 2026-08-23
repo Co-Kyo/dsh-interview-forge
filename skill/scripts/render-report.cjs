@@ -179,8 +179,10 @@ function renderQuestionCards(data) {
     <strong>${escapeHtml(q.id)} · ${escapeHtml(q.category)}</strong>
     <span class="tag ${tcls}">${escapeHtml(getCognitionLabel(q))}</span>${auditBadge}
   </div>${qaContentHtml}${cmpHtml}
-  <p class="quote">「${escapeHtml(userQuote)}」</p>
-  <p class="attribution">归因：${escapeHtml(attributionText)}</p>${narrativeHtml}${correctionHtml}${safePhraseHtml}
+  <div class="attr-section">${userQuote ? `
+    <p class="quote">「${escapeHtml(userQuote)}」</p>` : ''}
+    <p class="attribution">归因：${escapeHtml(attributionText)}</p>
+  </div>${narrativeHtml}${correctionHtml}${safePhraseHtml}
 </div>`;
   }).join('\n');
 }
@@ -360,7 +362,9 @@ canvas{width:100%;height:auto;max-width:100%}
 .risk-high{background:color-mix(in srgb,var(--rpt-red) 27%,transparent);color:var(--rpt-red);border:1px solid color-mix(in srgb,var(--rpt-red) 40%,transparent)}
 .risk-mid{background:color-mix(in srgb,var(--rpt-orange) 27%,transparent);color:var(--rpt-orange);border:1px solid color-mix(in srgb,var(--rpt-orange) 40%,transparent)}
 .risk-ok{background:color-mix(in srgb,var(--rpt-green) 27%,transparent);color:var(--rpt-green);border:1px solid color-mix(in srgb,var(--rpt-green) 40%,transparent)}
-.qa-block{margin:8px 0;padding:10px 12px;background:var(--rpt-qa);border-radius:6px;font-size:.9rem;line-height:1.5}
+.qa-block{margin:8px 0;padding:10px 12px;background:var(--rpt-qa);border:1px solid var(--rpt-bar);border-radius:8px;font-size:.9rem;line-height:1.5}
+.attr-section{background:var(--rpt-qa);border:1px solid var(--rpt-bar);border-radius:8px;padding:8px 12px;margin:10px 0}
+.attr-section .quote{margin-top:2px}
 .qa-block .q{color:var(--rpt-h2);margin-bottom:4px}
 .qa-block .a{color:var(--rpt-text)}
 .qa-block .correct-answer{color:var(--rpt-green);margin-top:4px}
