@@ -108,12 +108,6 @@ function priorityLabel(priority) {
   return 'P2 可选';
 }
 
-function priorityColor(priority) {
-  if (priority === 'P0') return '#f44336';
-  if (priority === 'P1') return '#ff9800';
-  return '#4caf50';
-}
-
 // ---- 计算维度得分 ----
 function computeDimensionScores(data) {
   if (Array.isArray(data.dimensions) && data.dimensions.length > 0 && typeof data.dimensions[0].score === 'number') {
@@ -220,7 +214,7 @@ function renderQuestionCards(data) {
       narrativeHtml = `
   <div class="${riskCls}">
     <strong>${riskIcon} 叙事风险：</strong>${riskBadges}
-    <p style="font-size:.82rem;margin-top:4px">${escapeHtml(evidenceSnippet)}</p>
+    <p class="narrative-evidence">${escapeHtml(evidenceSnippet)}</p>
   </div>`;
     }
 
@@ -266,14 +260,14 @@ function renderQuestionCards(data) {
 
     return `<!-- ${q.id} -->
 <div class="card ${cls}">
-  <div style="display:flex;justify-content:space-between;align-items:center">
+  <div class="card-head">
     <strong>${escapeHtml(q.id)} · ${escapeHtml(q.category)}</strong>
     <span class="tag ${tcls}">${escapeHtml(getCognitionLabel(q))}</span>${auditBadge}
   </div>${qaContentHtml}
-  <p style="font-size:.85rem;color:var(--rpt-sub,#b0b0d0);margin-top:6px">
+  <p class="quote">
     💬 「${escapeHtml(userQuote)}」
   </p>
-  <p style="font-size:.82rem;color:var(--rpt-meta,#8888aa);margin-top:4px">归因：${escapeHtml(attributionText)}</p>${narrativeHtml}${correctionHtml}${safePhraseHtml}
+  <p class="attribution">归因：${escapeHtml(attributionText)}</p>${narrativeHtml}${correctionHtml}${safePhraseHtml}
 </div>`;
   }).join('\n');
 }
@@ -311,7 +305,7 @@ function renderCrossChecks(data) {
     if (dimObj && dimObj.reason) detail = escapeHtml(dimObj.reason);
     else {
       const lines = qs.filter(q => q.crossCheck).map(q =>
-        `<div style="font-size:.85rem;color:var(--rpt-sub,#b0b0d0);margin-top:3px">· ${escapeHtml(q.id)}：${escapeHtml(q.crossCheck)}</div>`);
+        `<div class="cross-detail">· ${escapeHtml(q.id)}：${escapeHtml(q.crossCheck)}</div>`);
       detail = lines.join('\n');
     }
 
@@ -328,11 +322,10 @@ function renderActionPlan(data) {
   return plan.map(item => {
     const cls = actionClass(item.priority);
     const label = priorityLabel(item.priority);
-    const color = priorityColor(item.priority);
 
     return `<div class="action-item ${cls}">
-  <span class="priority" style="color:${color}">${escapeHtml(label)}</span>${escapeHtml(item.category)} — ${escapeHtml(item.action)}
-  <span style="font-size:.82rem;color:var(--rpt-sub,#b0b0d0)">${escapeHtml(item.reason || '')}</span>
+  <span class="priority">${escapeHtml(label)}</span>${escapeHtml(item.category)} — ${escapeHtml(item.action)}
+  <span class="reason">${escapeHtml(item.reason || '')}</span>
 </div>`;
   }).join('\n');
 }
@@ -381,9 +374,6 @@ function renderReport(data) {
 
   // 面试风险总结
   const riskSummaryHtml = riskSummary.map(group => {
-    const bgColor = group.isHigh ? 'var(--rpt-risk-bg,#2a1a1a)' : 'var(--rpt-warn-bg,#2a2a1a)';
-    const borderColor = group.isHigh ? 'var(--rpt-red,#f44336)' : 'var(--rpt-orange,#ff9800)';
-    const labelColor = group.isHigh ? 'var(--rpt-red,#ff5252)' : 'var(--rpt-orange,#ffa726)';
     const label = group.isHigh ? '危险' : '注意';
 
     // 聚合证据
@@ -391,9 +381,9 @@ function renderReport(data) {
       `${it.id} 中发现`
     ).join('、');
 
-    return `<div style="padding:10px;margin:6px 0;background:${bgColor};border-radius:8px;border-left:3px solid ${borderColor}">
-  <strong style="color:${labelColor}">${escapeHtml(label)}</strong>：${escapeHtml(group.risk)} — ${escapeHtml(evidences)}<br>
-  <span style="font-size:.82rem;color:var(--rpt-sub,#b0b0d0)">${escapeHtml(group.items[0]?.evidence?.substring(0, 80) || '')}</span>
+    return `<div class="summary-group ${group.isHigh ? 'is-high' : 'is-mid'}">
+  <strong>${escapeHtml(label)}</strong>：${escapeHtml(group.risk)} — ${escapeHtml(evidences)}<br>
+  <span class="summary-evidence">${escapeHtml(group.items[0]?.evidence?.substring(0, 80) || '')}</span>
 </div>`;
   }).join('\n');
 
@@ -410,55 +400,75 @@ function renderReport(data) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>InterviewForge 归因报告 - ${escapeHtml(title)}</title>
 <style>
+/* ---- tokens(:root)：默认主题；:root 之外禁止裸色值（L1 断言点） ---- */
 :root{--rpt-bg:#1a1a2e;--rpt-text:#e0e0e0;--rpt-title:#7c8cf8;--rpt-h2:#a0a8e8;--rpt-h3:#c0c4f0;--rpt-meta:#8888aa;--rpt-card:#252547;--rpt-card-border:#444466;--rpt-bar:#333355;--rpt-qa:#1e1e3a;--rpt-sub:#b0b0d0;--rpt-risk-bg:#2a1a1a;--rpt-warn-bg:#2a2a1a;--rpt-safe-bg:#1a2a1a;--rpt-green:#66bb6a;--rpt-red:#ef5350;--rpt-orange:#ffa726;--rpt-blue:#42a5f5;--rpt-purple:#ab47bc}
+/* ---- base ---- */
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--rpt-bg,#1a1a2e);color:var(--rpt-text,#e0e0e0);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.7;padding:24px;max-width:960px;margin:0 auto}
-h1{font-size:1.6rem;color:var(--rpt-title,#7c8cf8);margin-bottom:4px}
-h2{font-size:1.25rem;color:var(--rpt-h2,#a0a8e8);margin:28px 0 12px;border-left:3px solid var(--rpt-title,#7c8cf8);padding-left:10px}
-h3{font-size:1.05rem;color:var(--rpt-h3,#c0c4f0);margin:16px 0 8px}
-.meta{color:var(--rpt-meta,#8888aa);font-size:.85rem;margin-bottom:20px}
+body{background:var(--rpt-bg);color:var(--rpt-text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.7;padding:24px;max-width:960px;margin:0 auto}
+h1{font-size:1.6rem;color:var(--rpt-title);margin-bottom:4px}
+h2{font-size:1.25rem;color:var(--rpt-h2);margin:28px 0 12px;border-left:3px solid var(--rpt-title);padding-left:10px}
+h3{font-size:1.05rem;color:var(--rpt-h3);margin:16px 0 8px}
+.meta{color:var(--rpt-meta);font-size:.85rem;margin-bottom:20px}
+/* ---- layout ---- */
 .score-section{display:flex;gap:24px;margin:16px 0;flex-wrap:wrap}
-.score-card{background:var(--rpt-card,#252547);border-radius:10px;padding:20px;flex:1;min-width:200px;text-align:center}
-.score-card .big{font-size:3rem;font-weight:700;color:var(--rpt-title,#7c8cf8)}
-.score-card .label{font-size:.8rem;color:var(--rpt-meta,#8888aa);margin-top:4px}
-.dim-bar{margin:6px 0;display:flex;align-items:center;gap:8px}
-.dim-bar .name{width:80px;text-align:right;font-size:.8rem;color:var(--rpt-sub,#b0b0d0)}
-.dim-bar .bar{flex:1;background:var(--rpt-bar,#333355);border-radius:4px;height:18px;position:relative;overflow:hidden}
-.dim-bar .fill{height:100%;border-radius:4px;transition:width .3s}
-.dim-bar .pct{font-size:.75rem;color:var(--rpt-meta,#8888aa);width:36px}
-.card{background:var(--rpt-card,#252547);border-radius:10px;padding:16px;margin:12px 0;border-left:3px solid var(--rpt-card-border,#444466)}
-.card.correct{border-left-color:#4caf50}
-.card.wrong{border-left-color:#f44336}
-.card.partial{border-left-color:#ff9800}
-.tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.75rem;margin:2px 4px 2px 0}
-.tag-green{background:#2e7d3244;color:var(--rpt-green,#66bb6a)}
-.tag-red{background:#c6282844;color:var(--rpt-red,#ef5350)}
-.tag-orange{background:#e6510044;color:var(--rpt-orange,#ffa726)}
-.tag-blue{background:#1565c044;color:var(--rpt-blue,#42a5f5)}
-.tag-purple{background:#6a1b9a44;color:var(--rpt-purple,#ab47bc)}
-.risk-badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:.72rem;margin:2px 4px 2px 0;font-weight:600}
-.risk-high{background:#c6282844;color:var(--rpt-red,#ff5252);border:1px solid #ff525266}
-.risk-mid{background:#e6510044;color:var(--rpt-orange,#ffa726);border:1px solid #ffa72666}
-.risk-ok{background:#2e7d3244;color:var(--rpt-green,#66bb6a);border:1px solid #66bb6a66}
-.qa-block{margin:8px 0;padding:8px 12px;background:var(--rpt-qa,#1e1e3a);border-radius:6px;font-size:.88rem}
-.qa-block .q{color:var(--rpt-h2,#a0a8e8);margin-bottom:4px}
-.qa-block .a{color:var(--rpt-text,#e0e0e0)}
-.qa-block .correct-answer{color:var(--rpt-green,#66bb6a);margin-top:2px}
-.narrative-section{margin-top:8px;padding:8px 12px;background:var(--rpt-risk-bg,#2a1a1a);border-radius:6px;border-left:2px solid var(--rpt-red,#ff5252)}
-.narrative-section.warn{background:var(--rpt-warn-bg,#2a2a1a);border-left-color:var(--rpt-orange,#ffa726)}
-.safe-phrase{background:var(--rpt-safe-bg,#1a2a1a);border-left:2px solid var(--rpt-green,#66bb6a);padding:8px 12px;border-radius:6px;margin-top:6px;font-size:.85rem}
-.cross-check{margin:12px 0;padding:10px 14px;background:var(--rpt-qa,#1e1e3a);border-radius:8px;border:1px solid var(--rpt-bar,#333355)}
-.cross-check .dim-name{font-weight:600;color:var(--rpt-title,#7c8cf8)}
-.action-item{padding:10px 14px;margin:8px 0;border-radius:8px;border-left:3px}
-.action-p0{background:var(--rpt-risk-bg,#2a1a1a);border-left-color:#f44336}
-.action-p1{background:var(--rpt-warn-bg,#2a2a1a);border-left-color:#ff9800}
-.action-p2{background:var(--rpt-safe-bg,#1a2a1a);border-left-color:#4caf50}
-.action-item .priority{font-weight:700;font-size:.8rem;margin-right:8px}
-.deep-research{margin-top:28px;padding:16px;background:linear-gradient(135deg,var(--rpt-card,#252547),var(--rpt-qa,#1e1e3a));border:1px solid color-mix(in srgb,var(--rpt-title,#7c8cf8) 27%,transparent);border-radius:12px;text-align:center}
-.deep-research .emoji{font-size:1.8rem}
+.card-head{display:flex;justify-content:space-between;align-items:center}
+.risk-badges{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0}
+.risk-summary-list{margin:12px 0}
 .canvas-wrap{text-align:center;margin:16px 0}
 canvas{max-width:100%}
-.audit-badge{display:inline-block;padding:2px 8px;border-radius:8px;font-size:.72rem;background:#ff980033;color:#ffa726;border:1px solid #ffa72655;margin-left:6px}
+/* ---- components ---- */
+.score-card{background:var(--rpt-card);border-radius:10px;padding:20px;flex:1;min-width:200px;text-align:center}
+.score-card .big{font-size:3rem;font-weight:700;color:var(--rpt-title)}
+.score-card .label{font-size:.8rem;color:var(--rpt-meta);margin-top:4px}
+.dim-bar{margin:6px 0;display:flex;align-items:center;gap:8px}
+.dim-bar .name{width:80px;text-align:right;font-size:.8rem;color:var(--rpt-sub)}
+.dim-bar .bar{flex:1;background:var(--rpt-bar);border-radius:4px;height:18px;position:relative;overflow:hidden}
+.dim-bar .fill{height:100%;border-radius:4px;transition:width .3s}
+.dim-bar .pct{font-size:.75rem;color:var(--rpt-meta);width:36px}
+.card{background:var(--rpt-card);border-radius:10px;padding:16px;margin:12px 0;border-left:3px solid var(--rpt-card-border)}
+.card.correct{border-left-color:var(--rpt-green)}
+.card.wrong{border-left-color:var(--rpt-red)}
+.card.partial{border-left-color:var(--rpt-orange)}
+.tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.75rem;margin:2px 4px 2px 0}
+.tag-green{background:color-mix(in srgb,var(--rpt-green) 27%,transparent);color:var(--rpt-green)}
+.tag-red{background:color-mix(in srgb,var(--rpt-red) 27%,transparent);color:var(--rpt-red)}
+.tag-orange{background:color-mix(in srgb,var(--rpt-orange) 27%,transparent);color:var(--rpt-orange)}
+.tag-blue{background:color-mix(in srgb,var(--rpt-blue) 27%,transparent);color:var(--rpt-blue)}
+.tag-purple{background:color-mix(in srgb,var(--rpt-purple) 27%,transparent);color:var(--rpt-purple)}
+.risk-badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:.72rem;margin:2px 4px 2px 0;font-weight:600}
+.risk-high{background:color-mix(in srgb,var(--rpt-red) 27%,transparent);color:var(--rpt-red);border:1px solid color-mix(in srgb,var(--rpt-red) 40%,transparent)}
+.risk-mid{background:color-mix(in srgb,var(--rpt-orange) 27%,transparent);color:var(--rpt-orange);border:1px solid color-mix(in srgb,var(--rpt-orange) 40%,transparent)}
+.risk-ok{background:color-mix(in srgb,var(--rpt-green) 27%,transparent);color:var(--rpt-green);border:1px solid color-mix(in srgb,var(--rpt-green) 40%,transparent)}
+.qa-block{margin:8px 0;padding:8px 12px;background:var(--rpt-qa);border-radius:6px;font-size:.88rem}
+.qa-block .q{color:var(--rpt-h2);margin-bottom:4px}
+.qa-block .a{color:var(--rpt-text)}
+.qa-block .correct-answer{color:var(--rpt-green);margin-top:2px}
+.quote{font-size:.85rem;color:var(--rpt-sub);margin-top:6px}
+.attribution{font-size:.82rem;color:var(--rpt-meta);margin-top:4px}
+.narrative-section{margin-top:8px;padding:8px 12px;background:var(--rpt-risk-bg);border-radius:6px;border-left:2px solid var(--rpt-red)}
+.narrative-section.warn{background:var(--rpt-warn-bg);border-left-color:var(--rpt-orange)}
+.narrative-evidence{font-size:.82rem;margin-top:4px}
+.safe-phrase{background:var(--rpt-safe-bg);border-left:2px solid var(--rpt-green);padding:8px 12px;border-radius:6px;margin-top:6px;font-size:.85rem}
+.cross-check{margin:12px 0;padding:10px 14px;background:var(--rpt-qa);border-radius:8px;border:1px solid var(--rpt-bar)}
+.cross-check .dim-name{font-weight:600;color:var(--rpt-title)}
+.cross-detail{font-size:.85rem;color:var(--rpt-sub);margin-top:3px}
+.action-item{padding:10px 14px;margin:8px 0;border-radius:8px;border-left:3px}
+.action-p0{background:var(--rpt-risk-bg);border-left-color:var(--rpt-red)}
+.action-p1{background:var(--rpt-warn-bg);border-left-color:var(--rpt-orange)}
+.action-p2{background:var(--rpt-safe-bg);border-left-color:var(--rpt-green)}
+.action-item .priority{font-weight:700;font-size:.8rem;margin-right:8px}
+.action-p0 .priority{color:var(--rpt-red)}
+.action-p1 .priority{color:var(--rpt-orange)}
+.action-p2 .priority{color:var(--rpt-green)}
+.action-item .reason{font-size:.82rem;color:var(--rpt-sub)}
+.summary-group{padding:10px;margin:6px 0;background:var(--rpt-warn-bg);border-radius:8px;border-left:3px solid var(--rpt-orange)}
+.summary-group.is-high{background:var(--rpt-risk-bg);border-left-color:var(--rpt-red)}
+.summary-group.is-high strong{color:var(--rpt-red)}
+.summary-group.is-mid strong{color:var(--rpt-orange)}
+.summary-evidence{font-size:.82rem;color:var(--rpt-sub)}
+.audit-badge{display:inline-block;padding:2px 8px;border-radius:8px;font-size:.72rem;background:color-mix(in srgb,var(--rpt-orange) 20%,transparent);color:var(--rpt-orange);border:1px solid color-mix(in srgb,var(--rpt-orange) 33%,transparent);margin-left:6px}
+.deep-research{margin-top:28px;padding:16px;background:linear-gradient(135deg,var(--rpt-card),var(--rpt-qa));border:1px solid color-mix(in srgb,var(--rpt-title) 27%,transparent);border-radius:12px;text-align:center}
+.cta-note{margin-top:8px;font-size:.95rem}
 </style>
 </head>
 <body>
@@ -489,7 +499,7 @@ ${dimBarsHtml}
 
 <!-- 叙事风险概览 -->
 <h3>🚨 叙事风险概览</h3>
-<div style="display:flex;gap:12px;flex-wrap:wrap;margin:8px 0">
+<div class="risk-badges">
   ${riskBadgesHtml}
 </div>
 
@@ -511,7 +521,7 @@ ${crossCheckHtml}
 
 <!-- 面试风险总结 -->
 <h2>${COPY.riskSummaryTitle}</h2>
-<div style="margin:12px 0">
+<div class="risk-summary-list">
 ${riskSummaryHtml}
 </div>
 
@@ -523,7 +533,7 @@ ${actionPlanHtml}
 <!-- 深度研究提议 -->
 <div class="deep-research">
   <div class="emoji">📋</div>
-  <p style="margin-top:8px;font-size:.95rem">${COPY.ctaText}</p>
+  <p class="cta-note">${COPY.ctaText}</p>
 </div>
 
 <script>
