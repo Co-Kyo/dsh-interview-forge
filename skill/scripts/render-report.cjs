@@ -289,7 +289,7 @@ function renderReport(data) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>InterviewForge 归因报告 - ${escapeHtml(title)}</title>
+<title>InterviewForge 归因报告</title>
 <style>
 /* ---- tokens(:root)：默认主题；:root 之外禁止裸色值（L1 断言点） ---- */
 :root{--rpt-bg:#1a1a2e;--rpt-text:#e0e0e0;--rpt-title:#7c8cf8;--rpt-h2:#a0a8e8;--rpt-h3:#c0c4f0;--rpt-meta:#8888aa;--rpt-card:#252547;--rpt-card-border:#444466;--rpt-bar:#333355;--rpt-qa:#1e1e3a;--rpt-sub:#b0b0d0;--rpt-risk-bg:#2a1a1a;--rpt-warn-bg:#2a2a1a;--rpt-safe-bg:#1a2a1a;--rpt-green:#66bb6a;--rpt-red:#ef5350;--rpt-orange:#ffa726;--rpt-blue:#42a5f5;--rpt-purple:#ab47bc}

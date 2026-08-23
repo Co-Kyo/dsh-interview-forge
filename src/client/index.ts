@@ -42,6 +42,7 @@ const CSS = [
   '.forge-badge{font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;flex-shrink:0}',
   '.b-answering{background:#2f6bff22;color:var(--dsw-alias-brand-primary-new-colorprimary-new-color,#2f6bff)}.b-reported{background:#1f9d5522;color:var(--dsw-alias-state-success-primary,#1f9d55)}.b-done{background:#d99a0022;color:var(--dsw-alias-state-warn-primary,#d99a00)}',
   '.forge-modal{position:fixed;inset:0;background:var(--dsw-alias-bg-mask-1,rgba(0,0,0,.48));z-index:1400;display:flex;align-items:center;justify-content:center}',
+  '.forge-card--report{width:min(90vw,1200px)}',
   '.forge-card{width:min(760px,94vw);height:min(88vh,900px);background:var(--dsw-alias-bg-base,#fff);color:var(--dsw-alias-label-primary,#1c1c22);border-radius:16px;display:flex;flex-direction:column;overflow:hidden}',
   '.forge-card-head{display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-bottom:1px solid var(--dsw-alias-border-l1,#eee);font-size:13px;color:var(--dsw-alias-label-secondary,#565664);flex-shrink:0}',
   '.forge-body{flex:1;overflow:auto;padding:20px 24px}',
@@ -539,8 +540,8 @@ export async function apply(ctx: Context): Promise<void> {
     }, [])
     const themed = html ? themeReportHtml(html) : null
     return h('div', { className: 'forge-modal' },
-      h('div', { className: 'forge-card' },
-        h('div', { className: 'forge-card-head' }, h('span', null, '📊 反馈报告 · ' + props.title), h('button', { className: 'forge-btn', onClick: props.onClose }, '✕ 关闭')),
+      h('div', { className: 'forge-card forge-card--report' },
+        h('div', { className: 'forge-card-head' }, h('span', null, '反馈报告'), h('button', { className: 'forge-btn', onClick: props.onClose }, '✕ 关闭')),
         themed
           ? h('iframe', { key: themeTick, style: { flex: 1, border: 'none', width: '100%', height: '100%' }, srcDoc: themed, sandbox: 'allow-scripts' })
           : h('div', { className: 'forge-empty' }, '报告尚未生成或读取失败')))
