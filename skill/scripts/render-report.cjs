@@ -325,15 +325,15 @@ h3{font-size:1.05rem;color:var(--rpt-h3);margin:16px 0 8px}
 .meta{color:var(--rpt-meta);font-size:.85rem;margin-bottom:20px}
 .section-accent::before{content:'\\25B2';color:var(--rpt-orange);font-size:.85em;margin-right:6px}
 /* ---- layout ---- */
-.score-section{display:flex;gap:16px;margin:16px 0;flex-wrap:wrap}
+.score-section{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:16px 0}
 .card-head{display:flex;justify-content:space-between;align-items:center}
 .risk-badges{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}
 .risk-summary-list{margin:16px 0}
 .canvas-wrap{text-align:center;margin:20px auto 0;max-width:min(100%,420px)}
 canvas{width:100%;height:auto;max-width:100%}
 /* ---- components ---- */
-.score-card{background:var(--rpt-card);border-radius:10px;padding:20px;flex:1;min-width:180px;text-align:center}
-.score-card .big{font-size:3rem;font-weight:700;color:var(--rpt-title)}
+.score-card{background:var(--rpt-card);border-radius:10px;padding:14px 10px;text-align:center}
+.score-card .big{font-size:2.4rem;font-weight:700;color:var(--rpt-title)}
 .score-card .label{font-size:.8rem;color:var(--rpt-meta);margin-top:4px}
 .dim-bar{margin:6px 0;display:flex;align-items:center;gap:8px}
 .dim-bar .name{min-width:76px;text-align:right;font-size:.8rem;color:var(--rpt-sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -412,7 +412,6 @@ canvas{width:100%;height:auto;max-width:100%}
 /* ---- responsive ---- */
 @media (max-width:820px){
   body{padding:16px}
-  .score-section{flex-direction:column}
 }
 </style>
 </head>

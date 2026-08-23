@@ -135,6 +135,12 @@ test('W-6 四分区平级：对比行带「你的答案/正确答案」显式标
   const cmp = OPT.slice(ci, ai);
   assert.ok(cmp.includes('cmp-line') && cmp.length < 1200, '对比区应独立成区（含行结构，无越界）');
 });
+// W-7 红测：统计卡自适应网格（不再全宽竖排巨卡）
+test('W-7 统计卡自适应网格：紧凑布局，窄屏不堆巨卡', () => {
+  const styleSeg = OUT.slice(OUT.indexOf('<style>'), OUT.indexOf('</style>'));
+  assert.ok(styleSeg.includes('repeat(auto-fit,minmax(150px,1fr))'), '统计区应为自适应网格');
+  assert.ok(!styleSeg.includes('.score-section{flex-direction:column}'), '不应有全宽竖排巨卡覆盖');
+});
 const OUT = renderFixtureHtml();
 
 test('W-1 锚点：big 卡恰好 3 处 + 八区块 h2 精确匹配', () => {
