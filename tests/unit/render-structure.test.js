@@ -141,6 +141,12 @@ test('W-7 统计卡自适应网格：紧凑布局，窄屏不堆巨卡', () => {
   assert.ok(styleSeg.includes('repeat(auto-fit,minmax(150px,1fr))'), '统计区应为自适应网格');
   assert.ok(!styleSeg.includes('.score-section{flex-direction:column}'), '不应有全宽竖排巨卡覆盖');
 });
+// W-8 红测：对比行 grid 双列（标签列固定，值列对齐换行）
+test('W-8 对比行双列对齐：值列独立且不顶格换行', () => {
+  const styleSeg = OPT.slice(OPT.indexOf('<style>'), OPT.indexOf('</style>'));
+  assert.ok(styleSeg.includes('grid-template-columns:72px 1fr'), '对比行应为 标签列+值列 网格');
+  assert.ok(!/.cmp-line{display:flex/.test(styleSeg), '不应再是 flex 行内换行');
+});
 const OUT = renderFixtureHtml();
 
 test('W-1 锚点：big 卡恰好 3 处 + 八区块 h2 精确匹配', () => {

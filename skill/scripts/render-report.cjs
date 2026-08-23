@@ -365,9 +365,9 @@ canvas{width:100%;height:auto;max-width:100%}
 .qa-block .a{color:var(--rpt-text)}
 .qa-block .correct-answer{color:var(--rpt-green);margin-top:4px}
 .cmp-section{margin:10px 0;padding:8px 12px;background:var(--rpt-qa);border-radius:8px}
-.cmp-line{display:flex;gap:10px;align-items:baseline;padding:5px 0;font-size:.88rem}
+.cmp-line{display:grid;grid-template-columns:72px 1fr;gap:10px;align-items:start;padding:5px 0;font-size:.88rem}
 .cmp-line+.cmp-line{border-top:1px solid var(--rpt-bar)}
-.cmp-key{flex-shrink:0;font-size:.7rem;font-weight:700;padding:1px 8px;border-radius:8px;align-self:center}
+.cmp-key{font-size:.7rem;font-weight:700;padding:1px 8px;border-radius:8px;align-self:center;justify-self:start;width:max-content}
 .cmp-line.mine .cmp-key{color:var(--rpt-orange);background:color-mix(in srgb,var(--rpt-orange) 14%,transparent)}
 .cmp-line.right .cmp-key{color:var(--rpt-green);background:color-mix(in srgb,var(--rpt-green) 14%,transparent)}
 .opts{margin:8px 0 2px}
