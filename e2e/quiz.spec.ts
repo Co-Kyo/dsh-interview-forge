@@ -306,8 +306,11 @@ test.describe('InterviewForge 完成跳转', () => {
     const t6Sid = 'if-20260823-084428'; // forge_start 创建的真实场次（所有权链路即真实链路）
     const quizPath = `${ARCHIVE}/sessions/${dateDir}/quiz-${t6Sid}.json`;
     const resultPath = `${ARCHIVE}/sessions/${dateDir}/result-${t6Sid}.json`;
+    // report 文件必须一并清除：hasReport 优先判定，残留会把状态顶成 reported、点开变报告模态
+    const reportPath = `${ARCHIVE}/sessions/${dateDir}/report-${t6Sid}.html`;
     rmSync(quizPath, { force: true });
     rmSync(resultPath, { force: true });
+    rmSync(reportPath, { force: true });
     await page.goto('/');
     await page.waitForSelector('.forge-fab', { timeout: 20_000 });
     await page.click('.forge-fab');
