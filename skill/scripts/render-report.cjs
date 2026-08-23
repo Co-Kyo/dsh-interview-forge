@@ -35,9 +35,9 @@ function parseArgs() {
 // ---- 文案配置（业务场景/环境相关文案集中于此） ----
 const COPY = {
   sceneNote: '以「技术面试」为考察场景：按面试作答标准检验掌握度与表述能力',
-  riskSummaryTitle: '🚨 面试风险总结',
-  safePhraseLabel: '🎯 面试安全话术：',
-  preciseCorrectionLabel: '🎯 面试精确表述：',
+  riskSummaryTitle: '面试风险总结',
+  safePhraseLabel: '面试安全话术：',
+  preciseCorrectionLabel: '面试精确表述：',
   ctaText: '报告中的 P0 级薄弱点已识别。回到当前对话，回复<strong>「继续推进」</strong>，即可启动针对性深度研究——从源码和权威资料出发，帮你从「知道结论」推进到「理解机制」。'
 };
 
@@ -192,7 +192,7 @@ function renderQuestionCards(data) {
     const cls = cardClass(cTag);
     const tcls = tagClass(cTag);
     const auditBadge = q.questionAudit && q.questionAudit.flag !== 'ok'
-      ? `<span class="audit-badge">⚠️ ${escapeHtml(q.questionAudit.flag)}</span>`
+      ? `<span class="audit-badge">${escapeHtml(q.questionAudit.flag)}</span>`
       : '';
 
     // 叙事风险区
@@ -204,7 +204,6 @@ function renderQuestionCards(data) {
 
       const isHighRisk = q.narrativeRisks.some(r => ['过度推断', '不懂装懂', '版本盲区'].includes(r));
       const riskCls = isHighRisk ? 'narrative-section' : 'narrative-section warn';
-      const riskIcon = isHighRisk ? '🚨' : '⚠️';
 
       // 从 evidence 中提取用户原话
       const evidenceSnippet = q.evidence
@@ -213,7 +212,7 @@ function renderQuestionCards(data) {
 
       narrativeHtml = `
   <div class="${riskCls}">
-    <strong>${riskIcon} 叙事风险：</strong>${riskBadges}
+    <strong>叙事风险：</strong>${riskBadges}
     <p class="narrative-evidence">${escapeHtml(evidenceSnippet)}</p>
   </div>`;
     }
@@ -264,9 +263,7 @@ function renderQuestionCards(data) {
     <strong>${escapeHtml(q.id)} · ${escapeHtml(q.category)}</strong>
     <span class="tag ${tcls}">${escapeHtml(getCognitionLabel(q))}</span>${auditBadge}
   </div>${qaContentHtml}
-  <p class="quote">
-    💬 「${escapeHtml(userQuote)}」
-  </p>
+  <p class="quote">「${escapeHtml(userQuote)}」</p>
   <p class="attribution">归因：${escapeHtml(attributionText)}</p>${narrativeHtml}${correctionHtml}${safePhraseHtml}
 </div>`;
   }).join('\n');
@@ -409,6 +406,7 @@ h1{font-size:1.6rem;color:var(--rpt-title);margin-bottom:4px}
 h2{font-size:1.25rem;color:var(--rpt-h2);margin:20px 0 12px;border-left:3px solid var(--rpt-title);padding-left:10px}
 h3{font-size:1.05rem;color:var(--rpt-h3);margin:16px 0 8px}
 .meta{color:var(--rpt-meta);font-size:.85rem;margin-bottom:20px}
+.section-accent::before{content:'\\25B2';color:var(--rpt-orange);font-size:.85em;margin-right:6px}
 /* ---- layout ---- */
 .score-section{display:flex;gap:16px;margin:16px 0;flex-wrap:wrap}
 .card-head{display:flex;justify-content:space-between;align-items:center}
@@ -499,11 +497,11 @@ canvas{width:100%;height:auto;max-width:100%}
 </div>
 
 <!-- 维度条形图 -->
-<h3>维度得分</h3>
+<h2>维度得分</h2>
 ${dimBarsHtml}
 
 <!-- 叙事风险概览 -->
-<h3>🚨 叙事风险概览</h3>
+<h2 class="section-accent">叙事风险概览</h2>
 <div class="risk-badges">
   ${riskBadgesHtml}
 </div>
@@ -537,7 +535,6 @@ ${actionPlanHtml}
 
 <!-- 深度研究提议 -->
 <div class="deep-research">
-  <div class="emoji">📋</div>
   <p class="cta-note">${COPY.ctaText}</p>
 </div>
 
