@@ -22,6 +22,7 @@ function getCognitionTag(q) {
 // 英文→中文标签映射
 const cognitionLabelMap = {
   'genuine': '真懂',
+  '真懂': '理解精准',
   'partial': '半懂',
   'half': '半懂',
   'blind': '不会',

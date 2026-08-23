@@ -61,6 +61,40 @@ function renderFixtureHtml() {
   return readFileSync(html, 'utf8');
 }
 
+// W-4 红测：完整原题复盘 —— 题干不截断 + 选项列表带正确/所选双标记
+function renderWithOptionsHtml() {
+  const tmp = mkdtempSync(path.join(os.tmpdir(), 'sr-opt-'));
+  const json = path.join(tmp, 'f.json');
+  const html = path.join(tmp, 'f.html');
+  writeFileSync(json, JSON.stringify({
+    sessionId: 'if-o-000000', title: 'T', quizMeta: { title: 'T', totalQuestions: 1 },
+    overall: { score: 100, totalQuestions: 1, answered: 1, correct: 1 },
+    dimensions: [{ name: 'd', score: 100 }],
+    questions: [{
+      id: 'q01', type: 'choice', category: 'c',
+      stem: '这是一道故意写得很长很长的题干，用于验证报告复盘区不再截断到六十个字符，必须完整披露原始题面供用户回到真实场景。',
+      options: [{ key: 'A', text: '选项甲' }, { key: 'B', text: '选项乙' }, { key: 'C', text: '选项丙' }],
+      correctKey: 'B', selectedKey: 'A',
+      userAnswer: 'A ❌（选甲）', correctAnswer: 'B ✅（选乙）', isCorrect: false, cognitionTag: '不会', evidence: '用户原话：……', narrativeRisks: [],
+    }],
+    actions: [],
+  }, null, 2));
+  execFileSync('node', [RENDER, '--json', json, '--output', html], { encoding: 'utf-8' });
+  return readFileSync(html, 'utf8');
+}
+const OPT = renderWithOptionsHtml();
+
+test('W-4 完整原题披露：题干不截断 + 选项带正确/所选标记', () => {
+  assert.ok(OPT.includes('不再截断到六十个字符'), '题干应完整披露（不截断到 60 字）');
+  const opts = [...OPT.matchAll(/class="opt([^"]*)"[^>]*><span class="opt-k">([A-Z])<\/span>[\s\S]*?<span class="opt-t">([^<]*)<\/span>/g)];
+  assert.strictEqual(opts.length, 3, '三个选项都应渲染');
+  const sel = opts.find(m => m[2] === 'A');
+  const cor = opts.find(m => m[2] === 'B');
+  assert.ok(sel && sel[1].includes('sel'), '所选 A 应带 sel 标记');
+  assert.ok(cor && cor[1].includes('cor'), '正确 B 应带 cor 标记');
+  assert.ok(!opts.find(m => m[2] === 'C')[1].includes('sel') && !opts.find(m => m[2] === 'C')[1].includes('cor'), 'C 无标记');
+});
+
 const OUT = renderFixtureHtml();
 
 test('W-1 锚点：big 卡恰好 3 处 + 八区块 h2 精确匹配', () => {

@@ -129,6 +129,26 @@
             "type": "string",
             "description": "交叉检验结论（同 category 题目间一致性）"
           },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["key", "text"],
+              "properties": {
+                "key": { "type": "string" },
+                "text": { "type": "string" }
+              }
+            },
+            "description": "选择题选项（完整披露原题；开放题省略）"
+          },
+          "correctKey": {
+            "type": "string",
+            "description": "正确选项 key（仅选择题）"
+          },
+          "selectedKey": {
+            "type": "string",
+            "description": "用户所选选项 key（仅选择题）"
+          },
           "narrativeRisks": {
             "type": "array",
             "items": {
