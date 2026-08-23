@@ -158,7 +158,7 @@
 
 ### 2. HTML 雷达报告（由渲染脚本生成，LLM 不输出）
 
-> **重要**：HTML 报告由 `plugin/render-report.cjs` 根据 JSON 自动渲染，LLM 不再生成 HTML。
+> **重要**：HTML 报告由 `scripts/render-report.cjs` 根据 JSON 自动渲染，LLM 不再生成 HTML。
 > 以下规范供脚本模板维护参考，LLM 无需关注。
 
 报告模板规范（仅供脚本维护者参考）：
@@ -181,7 +181,7 @@
 2. 将 `{QUIZ_JSON}` 和 `{RESULT_JSON}` 占位符替换为实际数据
 3. 将完整 prompt 提交给大模型执行
 4. 解析大模型输出，**只提取 JSON 部分**写入 attribution 文件
-5. 调用渲染脚本生成 HTML 报告：`node {SKILL_DIR}/plugin/render-report.cjs --json <attribution.json> --output <report.html>`
+5. 调用渲染脚本生成 HTML 报告：`node {SKILL_DIR}/scripts/render-report.cjs --json <attribution.json> --output <report.html>`
 
 ---
 

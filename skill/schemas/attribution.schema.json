@@ -46,7 +46,9 @@
       "properties": {
         "score": {
           "type": "integer",
-          "description": "0-100 综合得分"
+          "description": "0-100 综合得分",
+          "minimum": 0,
+          "maximum": 100
         },
         "totalQuestions": {
           "type": "integer"
@@ -73,7 +75,9 @@
             "type": "string"
           },
           "score": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
           }
         }
       }
