@@ -301,9 +301,9 @@ test.describe('InterviewForge 完成跳转', () => {
   // 对齐 v29 closeQuiz：完成后可一键跳回出题会话并发送「答完了」
   test('T6 完成页提供跳转按钮，点击后切换会话并发送答完了', async ({ page }) => {
     // 自重置：T6 会把练习做完（submitted 且宿主记忆不可逆），先删档等自愈出列再重种
-    const d = new Date();
-    const dateDir = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     const t6Sid = 'if-20260823-084428'; // forge_start 创建的真实场次（所有权链路即真实链路）
+    // 归档日期必须由 SID 推导（宿主按 sid 内日期映射目录）——不可用“今天”，跨午夜会错位
+    const dateDir = `${t6Sid.slice(3, 7)}-${t6Sid.slice(7, 9)}-${t6Sid.slice(9, 11)}`;
     const quizPath = `${ARCHIVE}/sessions/${dateDir}/quiz-${t6Sid}.json`;
     const resultPath = `${ARCHIVE}/sessions/${dateDir}/result-${t6Sid}.json`;
     // report 文件必须一并清除：hasReport 优先判定，残留会把状态顶成 reported、点开变报告模态

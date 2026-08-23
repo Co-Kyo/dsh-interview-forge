@@ -151,7 +151,7 @@ test('W-8 对比行双列对齐：值列独立且不顶格换行', () => {
 test('W-9 四分区盒装：题目区与归因区带边框容器，证据引文归入归因区', () => {
   assert.ok(OPT.includes('class="qa-block"'), '题目区应有容器');
   const styleSeg = OPT.slice(OPT.indexOf('<style>'), OPT.indexOf('</style>'));
-  assert.ok(styleSeg.includes('.qa-block{border:1px solid'), '题目区应带边框（不再隐形）');
+  assert.ok((styleSeg.match(/border:1px solid var\(--rpt-bar\)/g) || []).length >= 2, '题目区与归因区应各带边框（不再隐形）');
   assert.ok(styleSeg.includes('.attr-section{background'), '应有归因区容器样式');
   const ai = OPT.indexOf('<div class="attr-section"');
   assert.ok(ai >= 0, '归因区容器应在 HTML 中');
