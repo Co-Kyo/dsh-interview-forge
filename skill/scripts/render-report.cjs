@@ -544,6 +544,34 @@ dims.forEach((d, i) => {
 </html>`;
 }
 
+// ---- 磁盘事实源合并（W-5）----
+// 选择题的选项/正确键/所选键一律以归档目录的 quiz/result 文件为准（确定性来源），
+// 不依赖 LLM 归因是否拷贝题目原文；归因缺 quiz 时（独立渲染）静默保持原样。
+function mergeGroundTruth(data, jsonPath) {
+  try {
+    const seg = jsonPath.split('/');
+    const si = seg.lastIndexOf('sessions');
+    if (si < 1 || !data.sessionId) return data;
+    const dir = seg.slice(0, si + 2).join('/');
+    const sid = data.sessionId;
+    const quiz = JSON.parse(fs.readFileSync(path.join(dir, 'quiz-' + sid + '.json'), 'utf8'));
+    let result = null;
+    try { result = JSON.parse(fs.readFileSync(path.join(dir, 'result-' + sid + '.json'), 'utf8')); } catch { /* 无 result 可容忍 */ }
+    const qmap = new Map((quiz.questions || []).map(q => [q.id, q]));
+    data.questions = (data.questions || []).map(q => {
+      const gq = qmap.get(q.id);
+      if (!gq || q.type !== 'choice') return q;
+      const merged = { ...q };
+      if (gq.options && gq.options.length) merged.options = gq.options;
+      if (gq.answer) merged.correctKey = gq.answer;
+      const sel = result && result.answers && result.answers[q.id] && result.answers[q.id].selected;
+      if (sel) merged.selectedKey = sel;
+      return merged;
+    });
+  } catch { /* quiz 缺失：保持 attribution 原样 */ }
+  return data;
+}
+
 // ---- 主流程 ----
 function main() {
   const { jsonPath, outputPath } = parseArgs();
@@ -557,6 +585,9 @@ function main() {
     console.error(`Failed to parse JSON: ${e.message}`);
     process.exit(1);
   }
+
+  // 磁盘事实源合并（W-5）：选择题选项/正确键/所选键以 quiz/result 为准
+  data = mergeGroundTruth(data, jsonPath);
 
   // 渲染 HTML
   const html = renderReport(data);

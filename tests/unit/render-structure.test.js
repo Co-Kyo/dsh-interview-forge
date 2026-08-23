@@ -14,7 +14,7 @@
 // 与 stats.test.js 同约定：本文件处于根 package.json 的 type:module 辖区，用 ESM 语法。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -95,6 +95,35 @@ test('W-4 完整原题披露：题干不截断 + 选项带正确/所选标记', 
   assert.ok(!opts.find(m => m[2] === 'C')[1].includes('sel') && !opts.find(m => m[2] === 'C')[1].includes('cor'), 'C 无标记');
 });
 
+// W-5 红测：选项/正确键/所选键以磁盘 quiz+result 为唯一事实源（与 LLM 归因无关）。
+// 归因 JSON 故意不含 options —— 渲染器必须自行从同目录 quiz/result 合并。
+function renderViaGroundTruth() {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'sr-gt-'));
+  const day = '2026-08-23';
+  const dir = path.join(root, 'sessions', day);
+  mkdirSync(dir, { recursive: true });
+  const sid = 'if-gt-000001';
+  const quiz = { meta: { title: 'GT', totalQuestions: 1 }, questions: [{ id: 'q1', type: 'choice', stem: 'GT 题干', options: [{ key: 'A', text: '甲' }, { key: 'B', text: '乙' }, { key: 'C', text: '丙' }], answer: 'B' }] };
+  const result = { sessionId: sid, answers: { q1: { selected: 'A', note: 'gt' } } };
+  const attribution = { sessionId: sid, title: 'GT', quizMeta: { title: 'GT', totalQuestions: 1 }, overall: { score: 0, totalQuestions: 1, answered: 1, correct: 0 }, dimensions: [{ name: 'd', score: 0 }], questions: [{ id: 'q1', type: 'choice', category: 'c', stem: 'GT 题干', userAnswer: 'A', correctAnswer: 'B', isCorrect: false, cognitionTag: '不会', evidence: 'e', narrativeRisks: [] }], actions: [] };
+  writeFileSync(path.join(dir, 'quiz-' + sid + '.json'), JSON.stringify(quiz));
+  writeFileSync(path.join(dir, 'result-' + sid + '.json'), JSON.stringify(result));
+  const aj = path.join(dir, 'attribution-' + sid + '.json');
+  writeFileSync(aj, JSON.stringify(attribution));
+  const html = path.join(root, 'out.html');
+  execFileSync('node', [RENDER, '--json', aj, '--output', html], { encoding: 'utf-8' });
+  return readFileSync(html, 'utf8');
+}
+const GT = renderViaGroundTruth();
+
+test('W-5 磁盘事实源合并：归因无 options 时由 quiz/result 确定性补全', () => {
+  assert.ok(GT.includes('class="opt') && GT.includes('opt-k'), '应渲染出选项列表');
+  assert.ok(GT.includes('[class="opt sel"') || GT.includes('class="opt sel"'), 'selectedKey=A 应标 sel');
+  assert.ok(GT.match(/opt[^"]*cor[^"]*"[^>]*><span class="opt-k">B<\/span>/) || GT.includes('opt-k">B<\/span>'), 'correctKey=B 应渲染');
+  const corB = GT.indexOf('opt-k">B<\/span>');
+  const seg = GT.slice(corB - 40, corB + 10);
+  assert.ok(seg.includes('cor'), 'B 选项应带 cor 标记');
+});
 const OUT = renderFixtureHtml();
 
 test('W-1 锚点：big 卡恰好 3 处 + 八区块 h2 精确匹配', () => {
