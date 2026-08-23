@@ -91,7 +91,7 @@ dsh-interview-forge/
 ## 本地开发
 
 ```sh
-git clone git@github.com:Co-Kyo/dsh-interview-forge.git && cd dsh-interview-forge
+git clone https://github.com/Co-Kyo/dsh-interview-forge.git && cd dsh-interview-forge
 npm install            # devDependencies（esbuild/typescript 等）；@deepseek-ai/* 由 peer 解析到宿主
 npm run build          # build:host + build:client
 dsh plugin --profile web add .    # 本地目录直装联调，重启 dsh web 生效

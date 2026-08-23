@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+# 公开边界检查：公开仓库内容不得出现私有工作档案的坐标或痕迹词。
+# 用法：sh scripts/check-public-boundary   （退出码 0 = 通过）
+set -eu
+
+patterns='dsh-interview-forge-work|git@github\.com:Co-Kyo/'
+
+if grep -RInE "$patterns" \
+    --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=lib \
+    --exclude-dir=test-results --exclude=check-public-boundary .; then
+  echo 'Public boundary violation: private work-archive references found.' >&2
+  exit 1
+fi
+
+echo 'Public boundary OK'
