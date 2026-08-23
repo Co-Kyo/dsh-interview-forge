@@ -124,6 +124,17 @@ test('W-5 磁盘事实源合并：归因无 options 时由 quiz/result 确定性
   const seg = GT.slice(corB - 40, corB + 10);
   assert.ok(seg.includes('cor'), 'B 选项应带 cor 标记');
 });
+// W-6 红测：题卡四分区平级结构 —— 题目 / 你的答案·正确答案对比 / 归因 / 叙事风险
+test('W-6 四分区平级：对比行带「你的答案/正确答案」显式标签', () => {
+  assert.ok(OPT.includes('cmp-line'), '应有对比区行');
+  assert.ok(OPT.includes('你的答案'), '应显式标注「你的答案」');
+  assert.ok(OPT.includes('正确答案'), '应显式标注「正确答案」');
+  const ci = OPT.indexOf('<div class="cmp-section"');
+  const ai = OPT.indexOf('归因：');
+  assert.ok(ci >= 0 && ai > ci, '对比区应在归因之前');
+  const cmp = OPT.slice(ci, ai);
+  assert.ok(cmp.includes('cmp-line') && cmp.length < 1200, '对比区应独立成区（含行结构，无越界）');
+});
 const OUT = renderFixtureHtml();
 
 test('W-1 锚点：big 卡恰好 3 处 + 八区块 h2 精确匹配', () => {

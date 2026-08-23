@@ -150,14 +150,24 @@ function renderQuestionCards(data) {
 
     // 逐题卡片 QA 区
     let qaContentHtml = '';
+    let cmpHtml = '';
     if (stemFull) {
       qaContentHtml = `
   <div class="qa-block">
     <div class="q">${escapeHtml(stemFull)}</div>${optsHtml ? `
     <div class="opts">${optsHtml}
     </div>` : ''}
-    <div class="a">${escapeHtml(userAnsBrief)}</div>${correctAns ? `\n    <div class="correct-answer">正确答案：${escapeHtml(correctAns)}</div>` : ''}
   </div>`;
+
+    // 对比区（W-6）：你的答案 vs 正确答案，显式标签 + 分隔行
+    if (userAnsBrief || correctAns) {
+      const cleanCorrect = (correctAns || '').replace(/^正确答案：/, '');
+      cmpHtml = `
+  <div class="cmp-section">${userAnsBrief ? `
+    <div class="cmp-line mine"><span class="cmp-key">你的答案</span><span class="cmp-val">${escapeHtml(userAnsBrief)}</span></div>` : ''}${cleanCorrect ? `
+    <div class="cmp-line right"><span class="cmp-key">正确答案</span><span class="cmp-val">${escapeHtml(cleanCorrect)}</span></div>` : ''}
+  </div>`;
+    }
     }
 
     // 归因简述（仅认知定性；交叉检验结论统一在下方专属区展示，避免混入解释）
@@ -168,7 +178,7 @@ function renderQuestionCards(data) {
   <div class="card-head">
     <strong>${escapeHtml(q.id)} · ${escapeHtml(q.category)}</strong>
     <span class="tag ${tcls}">${escapeHtml(getCognitionLabel(q))}</span>${auditBadge}
-  </div>${qaContentHtml}
+  </div>${qaContentHtml}${cmpHtml}
   <p class="quote">「${escapeHtml(userQuote)}」</p>
   <p class="attribution">归因：${escapeHtml(attributionText)}</p>${narrativeHtml}${correctionHtml}${safePhraseHtml}
 </div>`;
@@ -354,6 +364,12 @@ canvas{width:100%;height:auto;max-width:100%}
 .qa-block .q{color:var(--rpt-h2);margin-bottom:4px}
 .qa-block .a{color:var(--rpt-text)}
 .qa-block .correct-answer{color:var(--rpt-green);margin-top:4px}
+.cmp-section{margin:10px 0;padding:8px 12px;background:var(--rpt-qa);border-radius:8px}
+.cmp-line{display:flex;gap:10px;align-items:baseline;padding:5px 0;font-size:.88rem}
+.cmp-line+.cmp-line{border-top:1px solid var(--rpt-bar)}
+.cmp-key{flex-shrink:0;font-size:.7rem;font-weight:700;padding:1px 8px;border-radius:8px;align-self:center}
+.cmp-line.mine .cmp-key{color:var(--rpt-orange);background:color-mix(in srgb,var(--rpt-orange) 14%,transparent)}
+.cmp-line.right .cmp-key{color:var(--rpt-green);background:color-mix(in srgb,var(--rpt-green) 14%,transparent)}
 .opts{margin:8px 0 2px}
 .opt{display:flex;align-items:baseline;gap:8px;padding:4px 8px;margin:3px 0;border-radius:6px;font-size:.85rem;color:var(--rpt-text)}
 .opt .k{font-weight:700;min-width:16px;color:var(--rpt-sub)}
