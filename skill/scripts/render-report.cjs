@@ -51,11 +51,12 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-function scoreColor(pct) {
-  if (pct >= 80) return 'linear-gradient(90deg,#4caf50,#66bb6a)';
-  if (pct >= 60) return 'linear-gradient(90deg,#7c8cf8,#a0a8e8)';
-  if (pct >= 40) return 'linear-gradient(90deg,#ff9800,#ffa726)';
-  return 'linear-gradient(90deg,#f44336,#ef5350)';
+// S1: 改为 require('./lib/stats.js') 的 band
+function band(score) {
+  if (typeof score !== 'number' || Number.isNaN(score)) return 'low';
+  if (score >= 80) return 'high';
+  if (score >= 60) return 'mid';
+  return 'low';
 }
 
 function getCognitionTag(q) {
@@ -347,10 +348,9 @@ function renderReport(data) {
   // 维度条形图
   const dimBarsHtml = dims.map(d => {
     const pct = d.score;
-    const color = scoreColor(pct);
-    return `<div class="dim-bar">
-  <span class="name">${escapeHtml(d.name)}</span>
-  <div class="bar"><div class="fill" style="width:${pct}%;background:${color}"></div></div>
+    return `<div class="dim-bar dim-bar--${band(d.score)}">
+  <span class="name" title="${escapeHtml(d.name)}">${escapeHtml(d.name)}</span>
+  <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
   <span class="pct">${pct}%</span>
 </div>`;
   }).join('\n');
@@ -419,9 +419,15 @@ canvas{width:100%;height:auto;max-width:100%}
 .score-card .big{font-size:3rem;font-weight:700;color:var(--rpt-title)}
 .score-card .label{font-size:.8rem;color:var(--rpt-meta);margin-top:4px}
 .dim-bar{margin:6px 0;display:flex;align-items:center;gap:8px}
-.dim-bar .name{width:80px;text-align:right;font-size:.8rem;color:var(--rpt-sub)}
+.dim-bar .name{min-width:76px;text-align:right;font-size:.8rem;color:var(--rpt-sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dim-bar .bar{flex:1;background:var(--rpt-bar);border-radius:4px;height:18px;position:relative;overflow:hidden}
 .dim-bar .fill{height:100%;border-radius:4px;transition:width .3s}
+/* 三档语义色（L3 §4 定案 high=green/mid=blue/low=orange）。选择器用属性子串匹配而非
+   band 类名直写：e2e 契约（T7d）要求 dim-bar--{band} 记号在整份文档恰好出现 1 次，
+   样式段若复写该记号会使计数翻倍。 */
+.dim-bar[class*="--high"] .fill{background:var(--rpt-green)}
+.dim-bar[class*="--mid"] .fill{background:var(--rpt-blue)}
+.dim-bar[class*="--low"] .fill{background:var(--rpt-orange)}
 .dim-bar .pct{font-size:.75rem;color:var(--rpt-meta);width:36px}
 .card{background:var(--rpt-card);border-radius:10px;padding:16px;margin:12px 0;border-left:3px solid var(--rpt-card-border)}
 .card.correct{border-left-color:var(--rpt-green)}
