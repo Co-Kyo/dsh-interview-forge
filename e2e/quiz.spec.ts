@@ -7,7 +7,7 @@
  * 每条用例向档案目录种入独立练习场次，结束后清理（宿主 list 自愈机制自动出列）。
  */
 import { test, expect, type Page } from '@playwright/test';
-import { mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
+import { mkdirSync, writeFileSync, unlinkSync, rmSync } from 'node:fs';
 
 const ARCHIVE = '/home/tanka/答题插件开发/interview-forge-archive';
 // 每轮唯一标记：断言只认本轮写入的答案，宿主残留（重启前不可出列）不会造成假阳性
@@ -294,5 +294,64 @@ test.describe('InterviewForge Markdown 视觉样式', () => {
     expect(s.preLeftBar, '代码块应有 ≥3px 品牌色左侧强调条（区别于选项的整框描边）').toBeGreaterThanOrEqual(3);
     expect(s.deltaPreOpt, '代码块与选项框底色亮度差应 >24').toBeGreaterThan(24);
     expect(s.deltaPreCard, '代码块不应与题干卡同色（亮度差应 >18）').toBeGreaterThan(18);
+  });
+});
+
+test.describe('InterviewForge 完成跳转', () => {
+  // 对齐 v29 closeQuiz：完成后可一键跳回出题会话并发送「答完了」
+  test('T6 完成页提供跳转按钮，点击后切换会话并发送答完了', async ({ page }) => {
+    // 自重置：T6 会把练习做完（submitted 且宿主记忆不可逆），先删档等自愈出列再重种
+    const d = new Date();
+    const dateDir = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const t6Sid = 'if-20260823-084428'; // forge_start 创建的真实场次（所有权链路即真实链路）
+    const quizPath = `${ARCHIVE}/sessions/${dateDir}/quiz-${t6Sid}.json`;
+    const resultPath = `${ARCHIVE}/sessions/${dateDir}/result-${t6Sid}.json`;
+    rmSync(quizPath, { force: true });
+    rmSync(resultPath, { force: true });
+    await page.goto('/');
+    await page.waitForSelector('.forge-fab', { timeout: 20_000 });
+    await page.click('.forge-fab');
+    // 等旧条目从宿主内存出列（list 轮询 3s 一轮）
+    await page.waitForTimeout(7000);
+    writeFileSync(quizPath, JSON.stringify({
+      meta: { title: '[E2E:t6] 跳转会话冒烟', tags: ['e2e'] }, totalQuestions: 2,
+      questions: [
+        { id: 'q1', type: 'choice', stem: 'E2E-Q1：1+1=?', options: [{ key: 'A', text: '1' }, { key: 'B', text: '2' }, { key: 'C', text: '3' }], answer: 'B' },
+        { id: 'q2', type: 'choice', stem: 'E2E-Q2：天空颜色？', options: [{ key: 'A', text: '蓝' }, { key: 'B', text: '红' }], answer: 'A' },
+      ],
+    }, null, 2));
+    seededSids.push(t6Sid);
+    await page.goto('/');
+    await page.waitForSelector('.forge-fab', { timeout: 20_000 });
+    await page.waitForSelector('.forge-fab', { timeout: 20_000 });
+    await page.click('.forge-fab');
+    const item = page.locator('.forge-item', { hasText: '[E2E:t6] 跳转会话冒烟' });
+    await item.waitFor({ timeout: 20_000 });
+    const sid = (/if-\d{8}-\d{6}/.exec(await item.locator('.s').innerText()) || [''])[0];
+    expect(sid, '队列条目应带 sessionId 副标题').toMatch(/^if-/);
+    await item.click();
+    await page.waitForSelector('.forge-modal .forge-card', { timeout: 10_000 });
+
+    const txt = page.locator('.forge-txt');
+    // Q1
+    await expect(page.locator('.forge-card-head', { hasText: '第 1/2 题' })).toBeVisible({ timeout: 10_000 });
+    await page.locator('.forge-opt').first().click();
+    await txt.fill('t6 冒烟作答一');
+    await page.locator('button', { hasText: '提交并下一题' }).click();
+    // Q2 → 完成练习
+    await expect(page.locator('.forge-card-head', { hasText: '第 2/2 题' })).toBeVisible({ timeout: 10_000 });
+    await page.locator('.forge-opt').nth(1).click();
+    await txt.fill('t6 冒烟作答二');
+    await page.locator('button', { hasText: '完成练习' }).click();
+
+    // 完成页：出现跳转按钮
+    const jumpBtn = page.locator('.forge-modal button', { hasText: '跳转出题会话' });
+    await expect(jumpBtn).toBeVisible({ timeout: 10_000 });
+    await jumpBtn.click();
+
+    // 模态应关闭，且目标会话中出现已发送的「答完了」用户消息
+    await page.waitForSelector('.forge-modal', { state: 'detached', timeout: 15_000 });
+    await expect(page.getByText('答完了').first()).toBeVisible({ timeout: 20_000 });
+    void sid;
   });
 });

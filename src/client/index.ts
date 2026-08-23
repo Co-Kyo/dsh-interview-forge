@@ -20,7 +20,7 @@ type ForgeRpc = {
   finish(args: { sessionId: string }): Promise<{ ok: boolean }>
   report(args: { sessionId: string }): Promise<{ reportHtml: string | null }>
 }
-interface ForgeEntry { sessionId: string; title: string; totalQuestions: number; status: string }
+interface ForgeEntry { sessionId: string; title: string; totalQuestions: number; status: string; dshSessionId?: string | null }
 interface HistoryEntry { sessionId: string; title: string; totalQuestions: number; status: string; correctCount?: number | null; accuracy?: number | null; durationMs?: number | null }
 interface HistoryDay { year: number; month: number; day: number; entries: HistoryEntry[] }
 interface Q { id: string; type: string; stem: string; options?: { key: string; text: string }[]; answer?: string; explanation?: string }
@@ -257,11 +257,21 @@ export async function apply(ctx: Context): Promise<void> {
     register(spec: unknown, render: (props: unknown) => React.ReactElement): unknown
   }
 
+  // ---- 输入桥：捕获各会话的 inputActions（setDraft/submit），供「完成后跳回出题会话发送答完了」使用 ----
+  type InputActions = { setDraft(text: string): void; submit(): void }
+  const inputActionsBySid = new Map<string, InputActions>()
+  const sessionsSvc = (() => { try { return ctx.get('sessions') as unknown as { open(id: string): void } | undefined } catch { return undefined } })()
+  const latestBridgedSid = (): string | null => {
+    let last: string | null = null
+    try { for (const k of inputActionsBySid.keys()) last = k } catch { /* noop */ }
+    return last
+  }
+
   function fabView(): React.ReactElement {
     const [open, setOpen] = React.useState(false)
     const [entries, setEntries] = React.useState<ForgeEntry[]>([])
     const [err, setErr] = React.useState('')
-    const [quizView, setQuizView] = React.useState<{ sessionId: string } | null>(null)
+    const [quizView, setQuizView] = React.useState<{ sessionId: string; dshSessionId?: string | null } | null>(null)
     const [reportView, setReportView] = React.useState<{ sessionId: string; title: string } | null>(null)
     const [histOpen, setHistOpen] = React.useState(false)
     const refresh = () => { forgeRpc.list().then((d) => { setErr(''); const n = (d && d.entries) || []; setEntries(n); dstep('list:ok', 'entries=' + n.length + ' raw=' + (d ? JSON.stringify(d).slice(0, 140) : 'RESOLVED_NULL')) }).catch((e) => { const m = String(e && e.message || e); setErr(m); dstep('list:err', m) }) }
@@ -285,7 +295,7 @@ export async function apply(ctx: Context): Promise<void> {
                   const label = e.status === 'reported' ? '报告' : (e.status === 'submitted' ? '完成' : '作答中')
                   return h('div', { key: e.sessionId, className: 'forge-item', onClick: () => {
                     if (e.status === 'reported') setReportView({ sessionId: e.sessionId, title: e.title })
-                    else if (e.status === 'answering') setQuizView({ sessionId: e.sessionId })
+                    else if (e.status === 'answering') setQuizView({ sessionId: e.sessionId, dshSessionId: e.dshSessionId || latestBridgedSid() })
                   } },
                     h('div', { className: 't' }, e.title, h('div', { className: 's' }, e.sessionId + ' · ' + String(e.totalQuestions) + ' 题')),
                     h('span', { className: 'forge-badge ' + cls }, label))
@@ -308,11 +318,11 @@ export async function apply(ctx: Context): Promise<void> {
         onOpenReport: (sessionId: string, title: string) => { setHistOpen(false); setReportView({ sessionId, title }) },
         onOpenQuiz: (sessionId: string) => { setHistOpen(false); setQuizView({ sessionId }) },
       }) : null,
-      quizView ? h(QuizRunner, { rpc: forgeRpc, sessionId: quizView.sessionId, onClose: () => { setQuizView(null); refresh() } }) : null,
+      quizView ? h(QuizRunner, { rpc: forgeRpc, sessionId: quizView.sessionId, dshSessionId: quizView.dshSessionId, onClose: () => { setQuizView(null); refresh() } }) : null,
       reportView ? h(ReportView, { rpc: forgeRpc, sessionId: reportView.sessionId, title: reportView.title, onClose: () => { setReportView(null); refresh() } }) : null)
   }
 
-  function QuizRunner(props: { rpc: ForgeRpc; sessionId: string; onClose: () => void }): React.ReactElement {
+  function QuizRunner(props: { rpc: ForgeRpc; sessionId: string; dshSessionId?: string | null; onClose: () => void }): React.ReactElement {
     const [quiz, setQuiz] = React.useState<{ meta: { title: string }; questions: Q[] } | null>(null)
     const [view, setView] = React.useState<{ status: string; currentIndex: number; answers: Record<string, unknown>; elapsedGlobal: number; elapsedQuestion: number } | null>(null)
     const [selected, setSelected] = React.useState('')
@@ -367,6 +377,7 @@ export async function apply(ctx: Context): Promise<void> {
     }, [currentQid, view?.answers])
     // 卸载兜底：收起 / 关闭 / 切场次都会触发，防抖窗口内的草稿不丢
     React.useEffect(() => () => flushDraft(), [])
+    const [jumpState, setJumpState] = React.useState<'idle' | 'jumping' | 'no-channel'>('idle')
     React.useEffect(() => {
       // v29 对齐：openQuiz 即 forge.resume —— 首次开题启动计时，收起后重开恢复计时
       props.rpc.resume({ sessionId: props.sessionId }).catch(() => {})
@@ -399,12 +410,43 @@ export async function apply(ctx: Context): Promise<void> {
       }
     }, [view?.elapsedGlobal])
 
+    const pollNow = () => { props.rpc.snapshot({ sessionId: props.sessionId }).then((d) => { if (d) setView(d) }).catch(() => {}) }
+    // v29 对齐 closeQuiz：跳回出题会话并发送「答完了」（必须在早退 return 之前声明，完成页 JSX 引用它）
+    const jumpAndSend = () => {
+      const target = props.dshSessionId || latestBridgedSid()
+      if (!target) { setJumpState('no-channel'); return }
+      setJumpState('jumping')
+      try { sessionsSvc?.open(target) } catch { /* noop */ }
+      let tries = 0
+      const tick = () => {
+        const ia = inputActionsBySid.get(target)
+        if (ia) {
+          try {
+            ia.setDraft('答完了')
+            ia.submit()
+          } catch { /* noop */ }
+          props.onClose()
+          return
+        }
+        if (++tries < 12) window.setTimeout(tick, 350)
+        else setJumpState('no-channel')
+      }
+      tick()
+    }
     if (!quiz || !view) return h('div', { className: 'forge-modal' }, h('div', { className: 'forge-card' }, h('div', { className: 'forge-empty' }, '加载中…')))
     if (view.status !== 'answering') {
       return h('div', { className: 'forge-modal' },
         h('div', { className: 'forge-card' },
           h('div', { className: 'forge-card-head' }, h('span', null, '✅ 练习完成 · ' + quiz.meta.title), h('button', { className: 'forge-btn', onClick: props.onClose }, '关闭')),
-          h('div', { className: 'forge-body' }, h('div', { className: 'forge-empty' }, '本组练习已提交，等待生成交叉检验与反馈报告。'))))
+          h('div', { className: 'forge-body' },
+            h('div', { className: 'forge-empty' }, '本组练习已提交，等待生成交叉检验与反馈报告。'),
+            h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, marginTop: 14 } },
+              h('button', { className: 'forge-btn primary', disabled: jumpState !== 'idle', onClick: jumpAndSend },
+                jumpState === 'jumping' ? '正在跳转会话…' : '跳转出题会话并发送「答完了」'),
+              h('div', { style: { fontSize: 12, opacity: 0.65 } },
+                jumpState === 'no-channel'
+                  ? '未找到可用的会话输入通道（出题会话可能已关闭），可在对应会话手动发送「答完了」。'
+                  : '跳转后将自动向出题会话发送「答完了」，触发交叉检验与报告生成。')))))
     }
     const q = quiz.questions[view.currentIndex]
     const isLast = view.currentIndex >= quiz.questions.length - 1
@@ -413,7 +455,6 @@ export async function apply(ctx: Context): Promise<void> {
     const fmt = (s: number) => {
       const m = Math.floor(s/60); const sec = s%60; return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0')
     }
-    const pollNow = () => { props.rpc.snapshot({ sessionId: props.sessionId }).then((d) => { if (d) setView(d) }).catch(() => {}) }
     const submit = () => {
       if (!canSubmit) return
       flushDraft() // 立即落盘当前题（不走防抖）
@@ -622,5 +663,25 @@ export async function apply(ctx: Context): Promise<void> {
 
   slots.inject('shell.overlay', () =>
     slots.register({ name: 'shell.overlay', id: 'forge-overlay', order: 65 }, () => h(fabView, null)))
+  // v30 对齐：输入桥座位 —— conversation.composer.bar 是 single 槽位（内置 InputBar 已占
+  // priority 0，同优先级注册会 fail-loud；改 priority 要么遮死真输入条要么被遮住永不渲染），
+  // 故改挂 conversation.input.dock（session 作用域 list 槽位，可叠加、无优先级冲突）。
+  // sessions.provide 向所有 session 座位直供 inputActions/sessionId，捕获语义不变；
+  // 渲染为隐藏空元素，不占视觉位。
+  slots.inject('conversation.input.dock', () =>
+    slots.register({ name: 'conversation.input.dock', id: 'forge-input-bridge', order: 99 }, (seatProps: unknown) => {
+      try {
+        const p = seatProps as { sessionId?: string; inputActions?: InputActions; keyboard?: { actions?: InputActions } } | null
+        const ia = p?.inputActions || p?.keyboard?.actions
+        if (p && typeof p.sessionId === 'string' && ia && typeof ia.setDraft === 'function' && typeof ia.submit === 'function') {
+          if (inputActionsBySid.get(p.sessionId) !== ia) {
+            inputActionsBySid.delete(p.sessionId) // Map 插入序即最近活跃序
+            inputActionsBySid.set(p.sessionId, ia)
+            dstep('bridge:captured', p.sessionId)
+          }
+        }
+      } catch { /* noop */ }
+      return h('span', { style: { display: 'none' } })
+    }))
   dstep('slot:registered')
 }
