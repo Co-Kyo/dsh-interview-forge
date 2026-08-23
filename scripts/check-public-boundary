@@ -7,7 +7,7 @@ patterns='dsh-interview-forge-work|git@github\.com:Co-Kyo/'
 
 if grep -RInE "$patterns" \
     --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=lib \
-    --exclude-dir=test-results --exclude=check-public-boundary .; then
+    --exclude-dir=test-results --exclude-dir=.work --exclude=check-public-boundary .; then
   echo 'Public boundary violation: private work-archive references found.' >&2
   exit 1
 fi
