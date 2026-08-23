@@ -11,6 +11,11 @@
 
 const fs = require('fs');
 const path = require('path');
+const { getCognitionTag, getCognitionLabel, riskBadgeClass, HIGH_RISK_TAGS,
+  computeDimensionScores, computeNarrativeRiskStats, computeRiskSummary,
+  computeChoiceStats, computeHighRiskQuestionCount,
+  band,
+} = require('./lib/stats.js');
 
 // ---- CLI 参数解析 ----
 function parseArgs() {
@@ -51,34 +56,6 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-// S1: 改为 require('./lib/stats.js') 的 band
-function band(score) {
-  if (typeof score !== 'number' || Number.isNaN(score)) return 'low';
-  if (score >= 80) return 'high';
-  if (score >= 60) return 'mid';
-  return 'low';
-}
-
-function getCognitionTag(q) {
-  return q.cognitionTag || '';
-}
-
-// 英文→中文标签映射
-const cognitionLabelMap = {
-  'genuine': '真懂',
-  'partial': '半懂',
-  'half': '半懂',
-  'blind': '不会',
-  'surface': '表面懂',
-  'fuzzy': '模糊',
-  'inflated': '虚高',
-};
-
-function getCognitionLabel(q) {
-  const raw = getCognitionTag(q);
-  return cognitionLabelMap[raw] || raw;
-}
-
 function cardClass(cognitionTag) {
   if (['真懂', 'genuine'].includes(cognitionTag)) return 'correct';
   if (['不会', 'blind'].includes(cognitionTag)) return 'wrong';
@@ -89,12 +66,6 @@ function tagClass(cognitionTag) {
   if (['真懂', 'genuine'].includes(cognitionTag)) return 'tag-green';
   if (['不会', 'blind'].includes(cognitionTag)) return 'tag-red';
   return 'tag-orange';
-}
-
-function riskBadgeClass(risk) {
-  const high = ['过度推断', '不懂装懂', '版本盲区'];
-  if (high.includes(risk)) return 'risk-high';
-  return 'risk-mid';
 }
 
 function actionClass(priority) {
@@ -109,83 +80,6 @@ function priorityLabel(priority) {
   return 'P2 可选';
 }
 
-// ---- 计算维度得分 ----
-function computeDimensionScores(data) {
-  if (Array.isArray(data.dimensions) && data.dimensions.length > 0 && typeof data.dimensions[0].score === 'number') {
-    return data.dimensions.map(d => ({ name: d.name, score: d.score }));
-  }
-  return [];
-}
-// ---- 计算叙事风险统计 ----
-function computeNarrativeRiskStats(data) {
-  const riskCounts = {};
-  data.questions.forEach(q => {
-    (q.narrativeRisks || []).forEach(r => {
-      riskCounts[r] = (riskCounts[r] || 0) + 1;
-    });
-  });
-
-  const badges = [];
-  for (const [risk, count] of Object.entries(riskCounts)) {
-    badges.push({ risk, count, cls: riskBadgeClass(risk) });
-  }
-  // 按数量降序
-  badges.sort((a, b) => b.count - a.count);
-  return badges;
-}
-
-// ---- 计算面试风险总结 ----
-function computeRiskSummary(data) {
-  const highRisks = [];
-  const midRisks = [];
-
-  data.questions.forEach(q => {
-    (q.narrativeRisks || []).forEach(risk => {
-      const entry = { risk, evidence: q.evidence, id: q.id };
-      if (['过度推断', '不懂装懂', '版本盲区'].includes(risk)) {
-        highRisks.push(entry);
-      } else {
-        midRisks.push(entry);
-      }
-    });
-  });
-
-  // 去重聚合
-  const riskGroups = {};
-  [...highRisks, ...midRisks].forEach(({ risk, evidence, id }) => {
-    if (!riskGroups[risk]) riskGroups[risk] = { risk, isHigh: highRisks.some(h => h.risk === risk), items: [] };
-    riskGroups[risk].items.push({ id, evidence });
-  });
-
-  return Object.values(riskGroups);
-}
-
-// ---- 计算选择题正确数 ----
-// 事实来源：questions[].isCorrect（选择题由归因按 result.selected === quiz.answer 判定）。
-// 禁止用 userAnswer/correctAnswer 文本比较推导（两者是带评注的叙述，永远不可能全等）。
-// 兼容旧数据（无 isCorrect）：回退到 overall.correct / overall.totalQuestions，并标记 fallback。
-function computeChoiceStats(data) {
-  const questions = data.questions || [];
-  const hasFact = questions.some(q => typeof q.isCorrect === 'boolean');
-  if (hasFact) {
-    const choices = questions.filter(q => q.type === 'choice' || typeof q.isCorrect === 'boolean');
-    const choiceCount = choices.length;
-    const correctCount = choices.filter(q => q.isCorrect === true).length;
-    return { correctCount, totalCount: choiceCount, fallback: false };
-  }
-  const total = data.overall?.totalQuestions || questions.length || 0;
-  return { correctCount: data.overall?.correct || 0, totalCount: total, fallback: true };
-}
-
-// ---- 叙事高风险题数（按题去重：一题多个高风险标签只计 1） ----
-const HIGH_RISK_TAGS = ['过度推断', '不懂装懂', '版本盲区'];
-function computeHighRiskQuestionCount(data) {
-  return (data.questions || []).filter(q =>
-    (q.narrativeRisks || []).some(r => HIGH_RISK_TAGS.includes(r))
-  ).length;
-}
-
-// ---- 渲染逐题卡片 ----
 function renderQuestionCards(data) {
   const questions = data.questions || [];
   return questions.map(q => {
@@ -662,14 +556,18 @@ function main() {
 // ---- 环境字段校验闸门（防过时环境痕迹复发） ----
 const ENV_BLOCKLIST = ['workbuddy', 'openclaw', 'vite', 'localhost', '5199', 'interview-forge-public'];
 function validateSource() {
-  const src = fs.readFileSync(__filename, 'utf8').replace(/const ENV_BLOCKLIST[\s\S]*?];/, '');
-  const lower = String(src).toLowerCase();
+  const files = fs.readdirSync(__dirname).filter(f => /\.(c?js)$/.test(f))
+    .concat(fs.readdirSync(path.join(__dirname, 'lib')).filter(f => /\.(c?js)$/.test(f)).map(f => 'lib/' + f));
   const problems = [];
-  for (const term of ENV_BLOCKLIST) {
-    if (lower.includes(term)) problems.push('模板源码含环境痕迹: "' + term + '"');
+  for (const file of files) {
+    const src = fs.readFileSync(path.join(__dirname, file), 'utf8').replace(/const ENV_BLOCKLIST[\s\S]*?];/, '');
+    const lower = String(src).toLowerCase();
+    for (const term of ENV_BLOCKLIST) {
+      if (lower.includes(term)) problems.push(file + ' 含环境痕迹: "' + term + '"');
+    }
   }
   return problems;
 }
 
-
-main();
+module.exports = { renderReport };
+if (require.main === module) main();
