@@ -261,9 +261,8 @@ function renderQuestionCards(data) {
   </div>`;
     }
 
-    // 归因简述
+    // 归因简述（仅认知定性；交叉检验结论统一在下方专属区展示，避免混入解释）
     const attributionText = q.errorPattern ? `错误模式=${q.errorPattern}` : '理解精准';
-    const attributionDetail = q.crossCheck || '';
 
     return `<!-- ${q.id} -->
 <div class="card ${cls}">
@@ -274,12 +273,25 @@ function renderQuestionCards(data) {
   <p style="font-size:.85rem;color:var(--rpt-sub,#b0b0d0);margin-top:6px">
     💬 「${escapeHtml(userQuote)}」
   </p>
-  <p style="font-size:.82rem;color:var(--rpt-meta,#8888aa);margin-top:4px">归因：${escapeHtml(attributionText)}${attributionDetail ? ' — ' + escapeHtml(attributionDetail) : ''}</p>${narrativeHtml}${correctionHtml}${safePhraseHtml}
+  <p style="font-size:.82rem;color:var(--rpt-meta,#8888aa);margin-top:4px">归因：${escapeHtml(attributionText)}</p>${narrativeHtml}${correctionHtml}${safePhraseHtml}
 </div>`;
   }).join('\n');
 }
 
 // ---- 渲染交叉检验 ----
+// 从维度内各题认知标签综合出维度级交叉结论（契约兜底：
+// attribution.schema 的 dimensions 仅约定 {name,score}，status/reason 为可选增强）
+function synthDimStatus(qs) {
+  const labels = qs.map(q => getCognitionLabel(q));
+  const has = t => labels.includes(t);
+  if (has('不会')) return has('真懂') ? '一致性差，判为半懂' : '存在盲区';
+  if (has('半懂') || has('模糊')) return has('真懂') ? '整体半懂，存在薄弱面' : '半懂';
+  if (has('虚高')) return '掌握存疑（有虚高迹象）';
+  if (has('表面懂')) return has('真懂') ? '部分表面化' : '表面掌握';
+  if (labels.length === 1) return `${labels[0]}（单题，留待同维度验证）`;
+  return '掌握扎实';
+}
+
 function renderCrossChecks(data) {
   const questions = data.questions || [];
   const dimQuestions = {};
@@ -293,12 +305,19 @@ function renderCrossChecks(data) {
   return Object.entries(dimQuestions).map(([dim, qs]) => {
     const tagList = qs.map(q => `${q.id} ${getCognitionLabel(q)}`).join(' + ');
     const dimObj = Array.isArray(data.dimensions) ? data.dimensions.find(d => d.name === dim) : null;
-    const status = (dimObj && dimObj.status) || '—';
-    const detail = (dimObj && dimObj.reason) || '';
+    // 结论优先级：显式 status > 认知标签综合；详情优先级：显式 reason > 每题 crossCheck
+    const status = (dimObj && dimObj.status) || synthDimStatus(qs);
+    let detail;
+    if (dimObj && dimObj.reason) detail = escapeHtml(dimObj.reason);
+    else {
+      const lines = qs.filter(q => q.crossCheck).map(q =>
+        `<div style="font-size:.85rem;color:var(--rpt-sub,#b0b0d0);margin-top:3px">· ${escapeHtml(q.id)}：${escapeHtml(q.crossCheck)}</div>`);
+      detail = lines.join('\n');
+    }
 
     return `<div class="cross-check">
-  <span class="dim-name">${escapeHtml(dim)}</span>：${escapeHtml(tagList)} → <strong>${escapeHtml(status)}</strong><br>
-  <span style="font-size:.85rem;color:var(--rpt-sub,#b0b0d0)">${escapeHtml(detail)}</span>
+  <span class="dim-name">${escapeHtml(dim)}</span>：${escapeHtml(tagList)} → <strong>${escapeHtml(status)}</strong>
+  ${detail ? '<br>' + detail : ''}
 </div>`;
   }).join('\n');
 }

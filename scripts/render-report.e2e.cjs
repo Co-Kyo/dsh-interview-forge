@@ -17,7 +17,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const RENDER = path.join(__dirname, 'render-report.cjs');
+const RENDER = path.join(__dirname, '..', 'skill', 'scripts', 'render-report.cjs');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'forge-e2e-'));
 let failures = 0;
 
@@ -136,6 +136,63 @@ console.log('== E: 环境字段黑名单闸门（source-level：剔除定义段�
   const hits = banned.filter(w => src.includes(w));
   assert(hits.length === 0, '模板源码（剔除黑名单定义后）不含环境痕迹词' + (hits.length ? '（命中: ' + hits.join(', ') + '）' : ''));
 }
+
+console.log('== F: 交叉检验结论契约（结论必须落在下方专属区，不得混入上方题卡）==');
+{
+  const fixture = {
+    sessionId: 's', title: 't', quizMeta: {},
+    overall: { score: 60 },
+    // 契约形状：dimensions 仅 {name,score}（schema 如此约定，无 status/reason）
+    dimensions: [
+      { name: '响应式基础', score: 50 },
+      { name: '组件通信', score: 50 },
+    ],
+    questions: [
+      { id: 'q01', category: '响应式基础', stem: 's1', userAnswer: 'B ✅', correctAnswer: 'B', cognitionTag: '真懂', evidence: '用户原话：…——正确指出…',
+        crossCheck: '与 q02 同维度交叉：q01 真懂 + q02 不会 → 一致性差，维度判为半懂' },
+      { id: 'q02', category: '响应式基础', stem: 's2', userAnswer: 'A ❌', correctAnswer: 'B', cognitionTag: '不会', evidence: '用户原话：…',
+        crossCheck: '与 q01 同维度交叉：q02 不会 + q01 真懂 → 一致性差，维度判为半懂' },
+      { id: 'q03', category: '组件通信', stem: 's3', userAnswer: 'C ✅', correctAnswer: 'C', cognitionTag: '真懂', evidence: '用户原话：…',
+        crossCheck: '' },
+    ],
+    actions: [],
+  };
+  const r = render(fixture, 'fixtureF');
+  if (r.error) { assert(false, '渲染成功 — ' + r.error); }
+  else {
+    const segStart = r.html.indexOf('<h2>交叉检验结论</h2>');
+    const segEnd = r.html.indexOf('<!-- 面试风险总结 -->');
+    const seg = segStart >= 0 ? r.html.slice(segStart, segEnd) : '';
+    assert(seg.includes('一致性差'), 'F1 结论文字落入交叉检验结论区（含「一致性差」）');
+    assert(!/>—<\/strong>/.test(seg), 'F1 结论位不再渲染空占位 —');
+    assert(seg.includes('维度判为半懂'), 'F1 每题 crossCheck 详情在专属区可见');
+    const cardSeg = r.html.slice(r.html.indexOf('<!-- 逐题复盘 -->'), segStart);
+    assert(!cardSeg.includes('同维度交叉'), 'F2 题卡归因行不再混入交叉检验文字');
+    assert(cardSeg.includes('归因：理解精准'), 'F2 题卡保留简短归因标签');
+  }
+}
+
+console.log('== F2: 显式 dimensions[].status/reason 仍被尊重（向后兼容）==');
+{
+  const fixture = {
+    sessionId: 's', title: 't', quizMeta: {}, overall: { score: 60 },
+    dimensions: [{ name: '响应式基础', score: 50, status: '半懂（显式）', reason: '显式理由优先' }],
+    questions: [
+      { id: 'q01', category: '响应式基础', stem: 's1', userAnswer: 'A ✅', correctAnswer: 'A', cognitionTag: '真懂', evidence: 'e', crossCheck: '与自身同维度：单题' },
+    ],
+    actions: [],
+  };
+  const r = render(fixture, 'fixtureF2');
+  if (r.error) { assert(false, '渲染成功 — ' + r.error); }
+  else {
+    const segStart = r.html.indexOf('<h2>交叉检验结论</h2>');
+    const segEnd = r.html.indexOf('<!-- 面试风险总结 -->');
+    const seg = r.html.slice(segStart, segEnd);
+    assert(seg.includes('半懂（显式）'), '显式 status 优先展示');
+    assert(seg.includes('显式理由优先'), '显式 reason 展示于详情行');
+  }
+}
+
 
 console.log('== 结果 ==');
 if (failures > 0) {
